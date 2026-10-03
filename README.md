@@ -130,16 +130,22 @@ flowchart TD
 
 ## 3. Everything That Needs To Be Done
 
-### 3.1 Quick Install
-Run the automated installer:
+### 3.1 Installation Options
+
+#### Option A: User Install (No Sudo Required)
+Installs the CLI directly into `~/.local/bin/dell-g15-thermal` and links it into your user `$PATH`:
 ```bash
 git clone https://github.com/ullu1221/dell-g15-thermal-control.git
 cd dell-g15-thermal-control
-sudo ./install.sh
+./install.sh
 ```
 
-The installer configures:
-1. `/usr/local/bin/dell-g15-thermal` executable CLI.
+#### Option B: System-Wide Install (With Udev Rules & Systemd Boot Service)
+```bash
+sudo ./install.sh --system
+```
+This configures:
+1. `/usr/local/bin/dell-g15-thermal` and links to `~/.local/bin/dell-g15-thermal`.
 2. `/etc/udev/rules.d/99-dell-g15-thermal.rules` for passwordless hardware register access by group `wheel`.
 3. `/etc/systemd/system/dell-g15-thermal.service` to guarantee quiet, smooth startup on every boot.
 4. Normalizes `/var/lib/power-profiles-daemon/state.ini` to `balanced`.

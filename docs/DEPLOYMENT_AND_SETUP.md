@@ -11,17 +11,26 @@
 
 ---
 
-## 2. Quick Installation
+## 2. Installation Options
 
-Clone or navigate to the repository and execute the installer:
+### Option A: User Installation (No Root / Sudo Required)
+Installs the CLI immediately into `~/.local/bin/dell-g15-thermal` and links it into your user `$PATH`:
 
 ```bash
 cd /home/p/dell-g15-thermal-control
-sudo ./install.sh
+./install.sh
 ```
 
-The installer will:
-1. Copy the standalone controller script to `/usr/local/bin/dell-g15-thermal`.
+### Option B: System-Wide Installation (With Udev Rules & Systemd Boot Service)
+Installs `/usr/local/bin/dell-g15-thermal`, udev rules for group `wheel`, and enables the boot service:
+
+```bash
+cd /home/p/dell-g15-thermal-control
+sudo ./install.sh --system
+```
+
+The system installer will:
+1. Copy the standalone controller script to `/usr/local/bin/dell-g15-thermal` and link to `~/.local/bin/dell-g15-thermal`.
 2. Install `/etc/udev/rules.d/99-dell-g15-thermal.rules` and reload udev rules.
 3. Install and activate `/etc/systemd/system/dell-g15-thermal.service`.
 4. Normalize `power-profiles-daemon` to `balanced` mode to prevent boot-time fan screams.
