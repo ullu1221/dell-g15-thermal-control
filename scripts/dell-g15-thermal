@@ -189,35 +189,48 @@ def cmd_mode(target: str):
     resolved = MODE_ALIASES[target]
     print(f"[+] Setting Dell G15 thermal/power profile to '{resolved}'...")
 
-    # 1. Sync power-profiles-daemon for 100% desktop slider & third-party script compatibility
-    ppd_target = PPD_MAP.get(resolved, "balanced")
-    if shutil.which("powerprofilesctl"):
-        res = subprocess.run(["powerprofilesctl", "set", ppd_target], capture_output=True, text=True)
-        if res.returncode == 0:
-            print(f"[✓] Synced power-profiles-daemon ('{ppd_target}' active in desktop slider).")
-
-    # 2. Sync Intel Hardware Energy Performance Preference (EPP)
-    epp_val = EPP_MAP.get(resolved, "balance_performance")
-    for epp in Path("/sys/devices/system/cpu").glob("cpu*/cpufreq/energy_performance_preference"):
-        try:
-            epp.write_text(epp_val)
-        except Exception:
-            pass
-
-    # 3. Direct Dell WMAX ACPI thermal profile sync
-    plat_val = WMAX_MAP.get(resolved)
     wmax_path = get_wmax_profile_path()
-    if wmax_path.exists() and plat_val:
+    is_wmax_writable = wmax_path.exists() and os.access(wmax_path, os.W_OK)
+    plat_val = WMAX_MAP.get(resolved)
+
+    # 1. Sync power-profiles-daemon
+    # CRITICAL: If target is 'performance' (AWCC 0xa1 balanced-performance), powerprofilesctl
+    # maps 'performance' directly to AWCC 0xab (Game Shift 100% fan override).
+    # If the user lacks permissions to write 'balanced-performance' to sysfs, setting PPD to
+    # 'performance' will permanently trap the laptop in deafening 5000 RPM fans!
+    if resolved == "performance" and not is_wmax_writable:
+        print(f"[!] Notice: Writing to {wmax_path} requires root or group 'wheel' permissions.")
+        print("    Kept power-profiles-daemon on 'balanced' to prevent locking into 100% G-Mode fan scream (0xab).")
+        print("    Run 'sudo dell-g15-thermal init' once to permanently enable non-root switching.")
+    else:
+        ppd_target = PPD_MAP.get(resolved, "balanced")
+        if shutil.which("powerprofilesctl"):
+            res = subprocess.run(["powerprofilesctl", "set", ppd_target], capture_output=True, text=True)
+            if res.returncode == 0:
+                print(f"[✓] Synced power-profiles-daemon ('{ppd_target}' active in desktop slider).")
+
+    # 2. Direct Dell WMAX ACPI thermal profile sync
+    if wmax_path.exists() and plat_val and is_wmax_writable:
         try:
             wmax_path.write_text(plat_val)
             print(f"[✓] Applied native AWCC thermal mode '{plat_val}' (0x{get_awcc_code(plat_val):02x}) to WMAX.")
-        except PermissionError:
-            print(f"[!] Warning: Writing to {wmax_path} requires root or udev group 'wheel' permissions.")
-            print("    Run: sudo dell-g15-thermal mode " + resolved)
         except Exception as e:
             print(f"[!] Warning: Failed to write to WMAX profile: {e}")
 
-    print(f"[✓] Dell G15 '{resolved}' mode successfully activated.")
+    # 3. Sync Intel Hardware Energy Performance Preference (EPP)
+    epp_val = EPP_MAP.get(resolved, "balance_performance")
+    epp_updated = False
+    for epp in Path("/sys/devices/system/cpu").glob("cpu*/cpufreq/energy_performance_preference"):
+        try:
+            epp.write_text(epp_val)
+            epp_updated = True
+        except Exception:
+            pass
+
+    if resolved == "performance" and not is_wmax_writable:
+        print(f"[✓] Dell G15 CPU EPP set to '{epp_val}' (boost active, quiet dynamic fans).")
+    else:
+        print(f"[✓] Dell G15 '{resolved}' mode successfully activated.")
 
 
 def cmd_gmode():
@@ -237,7 +250,8 @@ def cmd_fan(cpu_boost: int = None, gpu_boost: int = None):
             hwmon.joinpath("fan1_boost").write_text(str(cpu_boost))
             print(f"[✓] CPU Fan Boost offset set to {cpu_boost}%.")
         except PermissionError:
-            print(f"[!] Setting fan boost requires root: sudo dell-g15-thermal fan {cpu_boost}")
+            print(f"[!] Setting fan boost requires root or group 'wheel' permissions.")
+            print("    Run: sudo dell-g15-thermal init")
         except Exception as e:
             print(f"[!] Error setting CPU fan boost: {e}")
 
@@ -254,7 +268,7 @@ def cmd_fan(cpu_boost: int = None, gpu_boost: int = None):
 
 
 def cmd_init():
-    """Boot-time initialization to guarantee quiet, smooth startup."""
+    """Boot-time initialization to guarantee quiet, smooth startup and fix permissions."""
     print("[*] Initializing Dell G15 5530 hardware thermal subsystem...")
 
     # Fix permissions for group wheel if running as root
@@ -264,8 +278,9 @@ def cmd_init():
             try:
                 os.chmod(wmax_path, 0o664)
                 shutil.chown(wmax_path, group="wheel")
-            except Exception:
-                pass
+                print(f"[✓] Granted group 'wheel' write access to {wmax_path}.")
+            except Exception as e:
+                print(f"[!] Could not set permissions on {wmax_path}: {e}")
 
         hwmon = get_alienware_hwmon()
         if hwmon:
@@ -275,8 +290,24 @@ def cmd_init():
                     try:
                         os.chmod(p, 0o664)
                         shutil.chown(p, group="wheel")
-                    except Exception:
-                        pass
+                        print(f"[✓] Granted group 'wheel' write access to {p}.")
+                    except Exception as e:
+                        print(f"[!] Could not set permissions on {p}: {e}")
+
+        # Also write permanent tmpfiles.d configuration so permissions persist across boots
+        try:
+            tmpfiles_path = Path("/etc/tmpfiles.d/dell-g15-thermal.conf")
+            tmpfiles_content = (
+                "# Dell G15 5530 Hardware Thermal & Fan Controls\n"
+                "z /sys/class/platform-profile/platform-profile-0/profile 0664 root wheel -\n"
+                "z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan1_boost 0664 root wheel -\n"
+                "z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan2_boost 0664 root wheel -\n"
+                "z /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference 0664 root wheel -\n"
+            )
+            tmpfiles_path.write_text(tmpfiles_content)
+            print("[✓] Created /etc/tmpfiles.d/dell-g15-thermal.conf for permanent persistence across reboots.")
+        except Exception as e:
+            print(f"[!] Could not write /etc/tmpfiles.d/dell-g15-thermal.conf: {e}")
 
     # Ensure powerprofilesdaemon is set to balanced on boot
     cmd_mode("balanced")
