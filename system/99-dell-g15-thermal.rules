@@ -1,0 +1,11 @@
+# ==============================================================================
+# Udev Rules for Dell G15 5530 Alienware WMAX Platform Profile and Fan Boost
+# Allows users in group 'wheel' to adjust thermal modes and fan boost offsets
+# without requiring root / sudo password on every invocation.
+# ==============================================================================
+
+# Grant group 'wheel' write access to platform-profile attributes
+SUBSYSTEM=="platform-profile", ACTION=="add|change", RUN+="/usr/bin/chmod 0664 /sys/class/platform-profile/platform-profile-0/profile", RUN+="/usr/bin/chgrp wheel /sys/class/platform-profile/platform-profile-0/profile"
+
+# Grant group 'wheel' write access to Alienware WMAX fan boost attributes
+SUBSYSTEM=="hwmon", ATTR{name}=="alienware_wmi", ACTION=="add|change", RUN+="/usr/bin/chmod 0664 %S%p/fan1_boost %S%p/fan2_boost", RUN+="/usr/bin/chgrp wheel %S%p/fan1_boost %S%p/fan2_boost"

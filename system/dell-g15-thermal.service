@@ -1,0 +1,13 @@
+[Unit]
+Description=Dell G15 5530 Thermal Mode & Power Profile Bridge
+Documentation=https://github.com/ullu1221/dell-g15-thermal-control
+After=power-profiles-daemon.service multi-user.target
+Wants=power-profiles-daemon.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dell-g15-thermal init
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
