@@ -9,10 +9,12 @@ and Game Shift (G-Mode) states.
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 # Dell G15 5530 Thermal Mode Mapping
@@ -66,6 +68,51 @@ WMAX_MAP = {
     "performance": "balanced-performance",
     "gmode": "performance",
 }
+
+STATE_PATHS = [
+    Path.home() / ".config" / "dell-g15" / "state.json",
+    Path("/var/tmp/dell-g15-state.json"),
+]
+
+
+def load_saved_state() -> dict:
+    """Loads saved thermal state from user config or system fallback."""
+    for p in STATE_PATHS:
+        try:
+            if p.exists():
+                return json.loads(p.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def save_persistent_state(mode: str, cpu_boost: int = None, gpu_boost: int = None):
+    """Persists current thermal mode and fan settings across system reboots."""
+    cur = load_saved_state()
+    cur["mode"] = mode
+    cur["wmax"] = WMAX_MAP.get(mode, "balanced")
+    cur["ppd"] = PPD_MAP.get(mode, "balanced")
+    cur["epp"] = EPP_MAP.get(mode, "balance_performance")
+    if cpu_boost is not None:
+        cur["cpu_boost"] = cpu_boost
+    elif "cpu_boost" not in cur:
+        cur["cpu_boost"] = 0
+    if gpu_boost is not None:
+        cur["gpu_boost"] = gpu_boost
+    elif "gpu_boost" not in cur:
+        cur["gpu_boost"] = 0
+    cur["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    saved_any = False
+    for p in STATE_PATHS:
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(cur, indent=2))
+            saved_any = True
+        except Exception:
+            pass
+    if saved_any:
+        print(f"[✓] Persisted thermal state '{mode}' across reboots.")
 
 
 def get_alienware_hwmon() -> Path | None:
@@ -179,7 +226,7 @@ def get_awcc_code(wmax_mode: str) -> int:
     return codes.get(wmax_mode, 0x00)
 
 
-def cmd_mode(target: str):
+def cmd_mode(target: str, save: bool = True):
     target = target.lower().strip()
     if target not in MODE_ALIASES:
         print(f"[ERROR] Unknown mode '{target}'.")
@@ -232,6 +279,9 @@ def cmd_mode(target: str):
     else:
         print(f"[✓] Dell G15 '{resolved}' mode successfully activated.")
 
+    if save:
+        save_persistent_state(resolved)
+
 
 def cmd_gmode():
     state = query_current_state()
@@ -243,7 +293,7 @@ def cmd_gmode():
         cmd_mode("gmode")
 
 
-def cmd_fan(cpu_boost: int = None, gpu_boost: int = None):
+def cmd_fan(cpu_boost: int = None, gpu_boost: int = None, save: bool = True):
     hwmon = get_alienware_hwmon()
     if cpu_boost is not None and hwmon:
         try:
@@ -264,11 +314,35 @@ def cmd_fan(cpu_boost: int = None, gpu_boost: int = None):
         except Exception as e:
             print(f"[!] Error setting GPU fan boost: {e}")
 
+    if save:
+        cur_mode = load_saved_state().get("mode", "balanced")
+        save_persistent_state(cur_mode, cpu_boost=cpu_boost, gpu_boost=gpu_boost)
+
     cmd_status()
 
 
+def cmd_restore():
+    """Restores the last saved thermal state across reboots."""
+    saved = load_saved_state()
+    if not saved or "mode" not in saved:
+        print("[*] No saved thermal state found. Applying default 'balanced' mode...")
+        cmd_mode("balanced", save=True)
+        return
+
+    mode = saved["mode"]
+    print(f"[*] Restoring saved Dell G15 thermal state: '{mode}' (saved at {saved.get('updated_at', 'unknown')})...")
+    cmd_mode(mode, save=False)
+
+    cpu_boost = saved.get("cpu_boost", 0)
+    gpu_boost = saved.get("gpu_boost", 0)
+    if cpu_boost > 0 or gpu_boost > 0:
+        cmd_fan(cpu_boost, gpu_boost, save=False)
+
+    print(f"[✓] Dell G15 hardware thermal state successfully restored to '{mode}'.")
+
+
 def cmd_init():
-    """Boot-time initialization to guarantee quiet, smooth startup and fix permissions."""
+    """Boot-time initialization to guarantee quiet, smooth startup, restore state, and fix permissions."""
     print("[*] Initializing Dell G15 5530 hardware thermal subsystem...")
 
     # Fix permissions for group wheel if running as root
@@ -309,9 +383,8 @@ def cmd_init():
         except Exception as e:
             print(f"[!] Could not write /etc/tmpfiles.d/dell-g15-thermal.conf: {e}")
 
-    # Ensure powerprofilesdaemon is set to balanced on boot
-    cmd_mode("balanced")
-    print("[✓] Dell G15 thermal subsystem initialized in Balanced mode.")
+    # Restore previous state across reboots (or default to balanced if first boot)
+    cmd_restore()
 
 
 def main():
@@ -325,6 +398,7 @@ Examples:
   dell-g15-thermal mode quiet       Activate silent acoustic mode
   dell-g15-thermal gmode            Toggle Game Shift / G-Mode (100% fans)
   dell-g15-thermal fan 50 50        Set CPU & GPU fan boost offsets to 50%
+  dell-g15-thermal restore          Restore last saved thermal state
         """,
     )
 
@@ -344,6 +418,7 @@ Examples:
     fan_parser.add_argument("gpu_boost", nargs="?", type=int, default=None, help="GPU fan boost percentage")
 
     subparsers.add_parser("init", help="Run systemd boot initialization")
+    subparsers.add_parser("restore", help="Restore last saved thermal state across reboots")
 
     args = parser.parse_args()
 
@@ -361,6 +436,8 @@ Examples:
         cmd_fan(args.cpu_boost, args.gpu_boost)
     elif args.command == "init":
         cmd_init()
+    elif args.command == "restore":
+        cmd_restore()
 
 
 if __name__ == "__main__":
