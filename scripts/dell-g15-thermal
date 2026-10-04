@@ -79,26 +79,30 @@ def load_saved_state() -> dict:
     """Loads saved thermal state from user config or system fallback."""
     for p in STATE_PATHS:
         try:
-            if p.exists():
-                return json.loads(p.read_text())
+            if p.exists() and p.is_file():
+                content = p.read_text().strip()
+                if content:
+                    data = json.loads(content)
+                    if isinstance(data, dict):
+                        return data
         except Exception:
             pass
     return {}
 
 
 def save_persistent_state(mode: str, cpu_boost: int = None, gpu_boost: int = None):
-    """Persists current thermal mode and fan settings across system reboots."""
+    """Persists current thermal mode and fan settings across system reboots atomically."""
     cur = load_saved_state()
     cur["mode"] = mode
     cur["wmax"] = WMAX_MAP.get(mode, "balanced")
     cur["ppd"] = PPD_MAP.get(mode, "balanced")
     cur["epp"] = EPP_MAP.get(mode, "balance_performance")
     if cpu_boost is not None:
-        cur["cpu_boost"] = cpu_boost
+        cur["cpu_boost"] = max(0, min(100, int(cpu_boost)))
     elif "cpu_boost" not in cur:
         cur["cpu_boost"] = 0
     if gpu_boost is not None:
-        cur["gpu_boost"] = gpu_boost
+        cur["gpu_boost"] = max(0, min(100, int(gpu_boost)))
     elif "gpu_boost" not in cur:
         cur["gpu_boost"] = 0
     cur["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -107,7 +111,9 @@ def save_persistent_state(mode: str, cpu_boost: int = None, gpu_boost: int = Non
     for p in STATE_PATHS:
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(json.dumps(cur, indent=2))
+            tmp_p = p.with_suffix(f".tmp.{os.getpid()}")
+            tmp_p.write_text(json.dumps(cur, indent=2))
+            tmp_p.replace(p)
             saved_any = True
         except Exception:
             pass
@@ -294,6 +300,15 @@ def cmd_gmode():
 
 
 def cmd_fan(cpu_boost: int = None, gpu_boost: int = None, save: bool = True):
+    if cpu_boost is not None:
+        if not (0 <= cpu_boost <= 100):
+            print(f"[ERROR] CPU fan boost must be between 0 and 100% (got {cpu_boost}%).")
+            return
+    if gpu_boost is not None:
+        if not (0 <= gpu_boost <= 100):
+            print(f"[ERROR] GPU fan boost must be between 0 and 100% (got {gpu_boost}%).")
+            return
+
     hwmon = get_alienware_hwmon()
     if cpu_boost is not None and hwmon:
         try:
@@ -329,14 +344,21 @@ def cmd_restore():
         cmd_mode("balanced", save=True)
         return
 
-    mode = saved["mode"]
+    mode = saved.get("mode", "balanced")
+    if mode not in MODE_ALIASES:
+        print(f"[!] Warning: Invalid saved mode '{mode}'. Falling back to 'balanced'.")
+        mode = "balanced"
+
     print(f"[*] Restoring saved Dell G15 thermal state: '{mode}' (saved at {saved.get('updated_at', 'unknown')})...")
     cmd_mode(mode, save=False)
 
-    cpu_boost = saved.get("cpu_boost", 0)
-    gpu_boost = saved.get("gpu_boost", 0)
-    if cpu_boost > 0 or gpu_boost > 0:
-        cmd_fan(cpu_boost, gpu_boost, save=False)
+    try:
+        cpu_boost = int(saved.get("cpu_boost", 0))
+        gpu_boost = int(saved.get("gpu_boost", 0))
+        if 0 < cpu_boost <= 100 or 0 < gpu_boost <= 100:
+            cmd_fan(cpu_boost, gpu_boost, save=False)
+    except Exception:
+        pass
 
     print(f"[✓] Dell G15 hardware thermal state successfully restored to '{mode}'.")
 
