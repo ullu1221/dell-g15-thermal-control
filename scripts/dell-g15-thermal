@@ -246,6 +246,17 @@ def cmd_mode(target: str, save: bool = True):
     is_wmax_writable = wmax_path.exists() and os.access(wmax_path, os.W_OK)
     plat_val = WMAX_MAP.get(resolved)
 
+    # 0. Sync CPU Scaling Governor with intel_pstate
+    # CRITICAL: intel_pstate locks EPP to read-only/EBUSY if scaling_governor is 'performance'.
+    # When switching to balanced/quiet/battery, scaling_governor MUST be set to 'powersave'
+    # before power-profiles-daemon writes to energy_performance_preference.
+    gov_target = "performance" if resolved in ("performance", "gmode") else "powersave"
+    for gov in Path("/sys/devices/system/cpu").glob("cpu*/cpufreq/scaling_governor"):
+        try:
+            gov.write_text(gov_target)
+        except Exception:
+            pass
+
     # 1. Sync power-profiles-daemon
     # CRITICAL: If target is 'performance' (AWCC 0xa1 balanced-performance), powerprofilesctl
     # maps 'performance' directly to AWCC 0xab (Game Shift 100% fan override).
