@@ -49,11 +49,9 @@ fn cmd_status() {
     let epp_path = Path::new("/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference");
     let epp = sysfs::read_sysfs(epp_path, &mut epp_buf).unwrap_or("unknown");
 
-    let ppd_profile = Command::new("powerprofilesctl")
-        .arg("get")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|_| "unknown".to_string());
+    let mut ppd_buf = [0u8; 64];
+    let acpi_path = Path::new(sysfs::ACPI_PROFILE_PATH);
+    let ppd_profile = sysfs::read_sysfs(acpi_path, &mut ppd_buf).unwrap_or(wmax_mode);
 
     let is_gmode = wmax_mode == "performance";
     let elapsed = t0.elapsed();
