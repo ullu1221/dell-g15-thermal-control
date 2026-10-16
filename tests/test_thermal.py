@@ -90,7 +90,7 @@ class TestDellG15ThermalControl(unittest.TestCase):
             mod.save_persistent_state("balanced", cpu_boost=0, gpu_boost=0)
 
     def test_06_sysfs_permissions(self):
-        """Verifies write accessibility of AWCC WMAX platform profile nodes."""
+        """Verifies write accessibility of AWCC WMAX platform profile nodes and CPU sysfs."""
         wmax_profile = Path("/sys/class/platform-profile/platform-profile-0/profile")
         if wmax_profile.exists():
             # Check file is readable
@@ -98,6 +98,12 @@ class TestDellG15ThermalControl(unittest.TestCase):
             # Verify valid active platform profile string
             profile = wmax_profile.read_text().strip()
             self.assertIn(profile, ["low-power", "quiet", "balanced", "balanced-performance", "performance", "custom"])
+
+        gov_file = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+        if gov_file.exists():
+            self.assertTrue(os.access(gov_file, os.R_OK))
+            gov = gov_file.read_text().strip()
+            self.assertIn(gov, ["powersave", "performance"])
 
     def test_07_live_mode_transition(self):
         """Verifies live switching to performance, then safely back to balanced."""

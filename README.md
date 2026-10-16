@@ -105,6 +105,7 @@ flowchart TD
     end
 
     subgraph CPU ["Tier 2: Intel Core CPU Subsystem"]
+        Bridge --> Gov["Scaling Governor (/sys/devices/system/cpu/cpu*/.../scaling_governor)"]
         Bridge --> EPP["EPP Registers (/sys/devices/system/cpu/cpu*/.../energy_performance_preference)"]
     end
 

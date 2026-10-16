@@ -420,6 +420,15 @@ def cmd_init():
                     except Exception as e:
                         print(f"[!] Could not set permissions on {p}: {e}")
 
+        # Also ensure permissions on cpu scaling_governor and energy_performance_preference
+        for pattern in ("cpu*/cpufreq/scaling_governor", "cpu*/cpufreq/energy_performance_preference"):
+            for f in Path("/sys/devices/system/cpu").glob(pattern):
+                try:
+                    os.chmod(f, 0o664)
+                    shutil.chown(f, group="wheel")
+                except Exception:
+                    pass
+
         # Also write permanent tmpfiles.d configuration so permissions persist across boots
         try:
             tmpfiles_path = Path("/etc/tmpfiles.d/dell-g15-thermal.conf")
@@ -428,6 +437,7 @@ def cmd_init():
                 "z /sys/class/platform-profile/platform-profile-0/profile 0664 root wheel -\n"
                 "z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan1_boost 0664 root wheel -\n"
                 "z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan2_boost 0664 root wheel -\n"
+                "z /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 0664 root wheel -\n"
                 "z /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference 0664 root wheel -\n"
             )
             tmpfiles_path.write_text(tmpfiles_content)

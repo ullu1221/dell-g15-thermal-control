@@ -50,6 +50,7 @@ flowchart TD
     AWCC_GUI --> Router
 
     Router --> PPD
+    Router --> Gov
     Router --> EPP
     Router --> WMAX
     Router --> HWMON
@@ -99,3 +100,10 @@ To prevent the system from ever booting with screaming fans:
 Normally, writing to sysfs requires `sudo` privileges. To allow regular desktop users and game scripts to adjust thermal modes without root prompts:
 - `system/99-dell-g15-thermal.rules` grants read-write access to group `wheel` for `/sys/class/platform-profile/platform-profile-0/profile` and `fan*_boost`.
 - Desktop hotkeys and user scripts can change profiles seamlessly.
+
+### 4.5 CPU Scaling Governor & EPP Synchronization
+Under the Linux `intel_pstate` CPU scaling driver, attempts to modify `energy_performance_preference` fail with `EBUSY` if the CPU `scaling_governor` is locked to `performance`.
+The bridge orchestrates Tier 2 by synchronizing `scaling_governor` across all CPU cores before profile transitions:
+- When transitioning to `balanced`, `quiet`, or `battery`, `scaling_governor` is set to `powersave` before PPD or EPP updates occur, guaranteeing reliable transitions without hardware lockouts.
+- When transitioning to `performance` or `gmode`, `scaling_governor` is updated to `performance`.
+

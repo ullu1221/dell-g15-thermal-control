@@ -76,6 +76,13 @@ install_system() {
         fi
     done
 
+    for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
+        if [[ -f "$f" ]]; then
+            chmod 664 "$f" || true
+            chgrp wheel "$f" || true
+        fi
+    done
+
     echo "[3/4] Installing boot initialization service..."
     install -m 644 "$SCRIPT_DIR/system/dell-g15-thermal.service" /etc/systemd/system/dell-g15-thermal.service
     systemctl daemon-reload
