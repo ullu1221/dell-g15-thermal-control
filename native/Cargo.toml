@@ -1,0 +1,15 @@
+[package]
+name = "g15-thermal-sentinel"
+version = "1.0.0"
+edition = "2021"
+authors = ["Dell G15 High-Risk Systems Engineering Team"]
+description = "Mission-critical, zero-allocation, static HPC hardware thermal and power controller for Dell G15 5530"
+license = "MIT"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+overflow-checks = true

@@ -1,0 +1,108 @@
+//! Alienware WMAX hwmon hardware sensor & fan controller.
+//! Enforces strict bounds checking: offsets must be within [0, 100]%.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use crate::sysfs::{read_sysfs_int, write_sysfs, SysfsError};
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TelemetryData {
+    pub cpu_rpm: Option<u32>,
+    pub gpu_rpm: Option<u32>,
+    pub cpu_boost: Option<u8>,
+    pub gpu_boost: Option<u8>,
+    pub cpu_temp_c: Option<i32>,
+    pub gpu_temp_c: Option<i32>,
+}
+
+/// Locates the active Alienware WMI hwmon path under platform-profile or class/hwmon.
+pub fn find_alienware_hwmon() -> Option<PathBuf> {
+    // 1. Primary path under platform-profile device symlink
+    let primary = Path::new("/sys/class/platform-profile/platform-profile-0/device/hwmon");
+    if primary.exists() {
+        if let Ok(entries) = fs::read_dir(primary) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.file_name().and_then(|n| n.to_str()).map_or(false, |s| s.starts_with("hwmon")) {
+                    return Some(p);
+                }
+            }
+        }
+    }
+
+    // 2. Global fallback scan under /sys/class/hwmon/hwmon*
+    let fallback = Path::new("/sys/class/hwmon");
+    if fallback.exists() {
+        if let Ok(entries) = fs::read_dir(fallback) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                let name_file = p.join("name");
+                let mut buf = [0u8; 64];
+                if let Ok(name) = crate::sysfs::read_sysfs(&name_file, &mut buf) {
+                    if name.contains("alienware_wmi") {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Reads current hardware telemetry (fan RPMs, boosts, and temperatures).
+pub fn read_telemetry() -> TelemetryData {
+    let mut data = TelemetryData::default();
+    let hwmon = match find_alienware_hwmon() {
+        Some(h) => h,
+        None => return data,
+    };
+
+    if let Ok(rpm) = read_sysfs_int(&hwmon.join("fan1_input")) {
+        if rpm >= 0 && rpm <= 10000 {
+            data.cpu_rpm = Some(rpm as u32);
+        }
+    }
+    if let Ok(rpm) = read_sysfs_int(&hwmon.join("fan2_input")) {
+        if rpm >= 0 && rpm <= 10000 {
+            data.gpu_rpm = Some(rpm as u32);
+        }
+    }
+    if let Ok(boost) = read_sysfs_int(&hwmon.join("fan1_boost")) {
+        if (0..=100).contains(&boost) {
+            data.cpu_boost = Some(boost as u8);
+        }
+    }
+    if let Ok(boost) = read_sysfs_int(&hwmon.join("fan2_boost")) {
+        if (0..=100).contains(&boost) {
+            data.gpu_boost = Some(boost as u8);
+        }
+    }
+    if let Ok(mdeg) = read_sysfs_int(&hwmon.join("temp1_input")) {
+        data.cpu_temp_c = Some((mdeg / 1000) as i32);
+    }
+    if let Ok(mdeg) = read_sysfs_int(&hwmon.join("temp2_input")) {
+        data.gpu_temp_c = Some((mdeg / 1000) as i32);
+    }
+
+    data
+}
+
+/// Sets fan boost offsets defensively. Enforces 0 <= boost <= 100.
+pub fn set_fan_boost(cpu_boost: Option<u8>, gpu_boost: Option<u8>) -> Result<(), SysfsError> {
+    let hwmon = find_alienware_hwmon().ok_or(SysfsError::NotFound)?;
+
+    if let Some(b) = cpu_boost {
+        let bounded = b.min(100);
+        let path = hwmon.join("fan1_boost");
+        write_sysfs(&path, &bounded.to_string())?;
+    }
+
+    if let Some(b) = gpu_boost {
+        let bounded = b.min(100);
+        let path = hwmon.join("fan2_boost");
+        write_sysfs(&path, &bounded.to_string())?;
+    }
+
+    Ok(())
+}

@@ -19,6 +19,15 @@ install_user() {
     chmod +x "$SCRIPT_DIR/scripts/dell-g15-thermal"
     echo "  -> Linked: $HOME/.local/bin/dell-g15-thermal"
 
+    if command -v cargo &>/dev/null && [[ -d "$SCRIPT_DIR/native" ]]; then
+        echo "[*] Compiling High-Risk HPC Static Native Engine (g15-sentinel)..."
+        (cd "$SCRIPT_DIR/native" && cargo build --release -q) || true
+        if [[ -f "$SCRIPT_DIR/native/target/release/g15-thermal-sentinel" ]]; then
+            cp "$SCRIPT_DIR/native/target/release/g15-thermal-sentinel" "$HOME/.local/bin/g15-sentinel"
+            echo "  -> Installed High-Risk HPC Binary: $HOME/.local/bin/g15-sentinel"
+        fi
+    fi
+
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
         echo "  [!] Notice: ~/.local/bin is not in your current PATH. Add it to ~/.bashrc:"
         echo "      export PATH=\"\$HOME/.local/bin:\$PATH\""
@@ -46,6 +55,15 @@ install_system() {
 
     echo "[1/4] Installing /usr/local/bin/dell-g15-thermal..."
     install -m 755 "$SCRIPT_DIR/scripts/dell-g15-thermal" /usr/local/bin/dell-g15-thermal
+
+    if command -v cargo &>/dev/null && [[ -d "$SCRIPT_DIR/native" ]]; then
+        echo "      Compiling & installing /usr/local/bin/g15-sentinel (HPC Native Engine)..."
+        (cd "$SCRIPT_DIR/native" && cargo build --release -q) || true
+        if [[ -f "$SCRIPT_DIR/native/target/release/g15-thermal-sentinel" ]]; then
+            install -m 755 "$SCRIPT_DIR/native/target/release/g15-thermal-sentinel" /usr/local/bin/g15-sentinel
+            echo "  -> Installed /usr/local/bin/g15-sentinel"
+        fi
+    fi
 
     # Also link to user's .local/bin if SUDO_USER is set
     if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]]; then

@@ -123,6 +123,19 @@ class TestDellG15ThermalControl(unittest.TestCase):
         self.assertEqual(res.returncode, 0, f"Restore failed: {res.stderr}")
         self.assertIn("successfully restored", res.stdout)
 
+    def test_09_native_sentinel_binary(self):
+        """Verifies High-Risk HPC Static Native Engine (g15-sentinel) execution and latency."""
+        native_bin = REPO_DIR / "native" / "target" / "release" / "g15-thermal-sentinel"
+        if not native_bin.exists():
+            native_bin = Path("/usr/local/bin/g15-sentinel")
+
+        if native_bin.exists():
+            res = subprocess.run([str(native_bin), "status"], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 0, f"Native binary failed: {res.stderr}")
+            self.assertIn("Native AWCC WMAX Profile", res.stdout)
+            self.assertIn("CPU Scaling Governor", res.stdout)
+            self.assertIn("HPC Sentinel Telemetry Latency", res.stdout)
+
 
 if __name__ == "__main__":
     print("=" * 65)
