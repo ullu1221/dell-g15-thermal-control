@@ -16,6 +16,16 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_DIR / "scripts" / "dell-g15-thermal"
 
 
+def load_dell_thermal():
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
+    loader = SourceFileLoader("dell_thermal", str(SCRIPT))
+    spec = importlib.util.spec_from_file_location("dell_thermal", str(SCRIPT), loader=loader)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 class TestDellG15ThermalControl(unittest.TestCase):
 
     def test_01_script_exists_and_executable(self):
@@ -37,20 +47,27 @@ class TestDellG15ThermalControl(unittest.TestCase):
         res = subprocess.run([sys.executable, str(SCRIPT), "status"], capture_output=True, text=True)
         self.assertEqual(res.returncode, 0, f"Status failed: {res.stderr}")
         self.assertIn("Native AWCC WMAX Profile", res.stdout)
+        self.assertIn("CPU Scaling Governor", res.stdout)
         self.assertIn("CPU Temperature", res.stdout)
         self.assertIn("GPU Temperature", res.stdout)
 
     def test_04_mapping_consistency(self):
         """Verifies bidirectional ACPI, PPD, and EPP mapping tables."""
-        from importlib.machinery import SourceFileLoader
-        mod = SourceFileLoader("dell_thermal", str(SCRIPT)).load_module()
+        mod = load_dell_thermal()
 
         # Ensure all supported modes map correctly
         expected_modes = ["battery", "quiet", "balanced", "performance", "gmode"]
         for m in expected_modes:
             self.assertIn(m, mod.PPD_MAP, f"Missing PPD mapping for {m}")
+            self.assertIn(m, mod.GOVERNOR_MAP, f"Missing GOVERNOR mapping for {m}")
             self.assertIn(m, mod.EPP_MAP, f"Missing EPP mapping for {m}")
             self.assertIn(m, mod.WMAX_MAP, f"Missing WMAX mapping for {m}")
+
+        self.assertEqual(mod.GOVERNOR_MAP["battery"], "powersave")
+        self.assertEqual(mod.GOVERNOR_MAP["quiet"], "powersave")
+        self.assertEqual(mod.GOVERNOR_MAP["balanced"], "powersave")
+        self.assertEqual(mod.GOVERNOR_MAP["performance"], "performance")
+        self.assertEqual(mod.GOVERNOR_MAP["gmode"], "performance")
 
         self.assertEqual(mod.WMAX_MAP["balanced"], "balanced")
         self.assertEqual(mod.WMAX_MAP["performance"], "balanced-performance")
@@ -58,15 +75,19 @@ class TestDellG15ThermalControl(unittest.TestCase):
 
     def test_05_state_persistence_cycle(self):
         """Verifies atomic state saving and loading across temporary state files."""
-        from importlib.machinery import SourceFileLoader
-        mod = SourceFileLoader("dell_thermal", str(SCRIPT)).load_module()
+        mod = load_dell_thermal()
 
         # Test save and load
-        mod.save_persistent_state("balanced", cpu_boost=25, gpu_boost=30)
-        state = mod.load_saved_state()
-        self.assertEqual(state.get("mode"), "balanced")
-        self.assertEqual(state.get("cpu_boost"), 25)
-        self.assertEqual(state.get("gpu_boost"), 30)
+        try:
+            mod.save_persistent_state("balanced", cpu_boost=25, gpu_boost=30)
+            state = mod.load_saved_state()
+            self.assertEqual(state.get("mode"), "balanced")
+            self.assertEqual(state.get("governor"), "powersave")
+            self.assertEqual(state.get("cpu_boost"), 25)
+            self.assertEqual(state.get("gpu_boost"), 30)
+        finally:
+            # Clean up so subsequent restore tests don't leave fan boost active on live hardware
+            mod.save_persistent_state("balanced", cpu_boost=0, gpu_boost=0)
 
     def test_06_sysfs_permissions(self):
         """Verifies write accessibility of AWCC WMAX platform profile nodes."""

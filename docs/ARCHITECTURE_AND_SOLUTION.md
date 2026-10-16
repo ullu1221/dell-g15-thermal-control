@@ -61,13 +61,13 @@ flowchart TD
 
 Every mode transition coordinates all three hardware/software layers simultaneously:
 
-| Desired Mode | Desktop Slider (`powerprofilesctl`) | Intel EPP Register | Dell WMAX ACPI Profile | Embedded Controller (EC) Behavior |
-| :--- | :--- | :--- | :--- | :--- |
-| **`battery`** | `power-saver` | `power` | `low-power` (`0xa5`) | Aggressive CPU clock capping; fans 0 RPM / passive |
-| **`quiet`** | `power-saver` | `power` | `quiet` (`0xa3`) | Low acoustic limit; fans whisper quiet (~800–1200 RPM) |
-| **`balanced`** | `balanced` | `balance_performance` | `balanced` (`0xa0`) | Normal factory dynamic curves; adaptive fan ramp |
-| **`performance`** | `performance` | `performance` | `balanced-performance` (`0xa1`) | **Unlocked PL1/PL2 & 95W GPU TGP; dynamic smart fans (NO 100% scream)** |
-| **`gmode`** | `performance` | `performance` | `performance` (`0xab`) | **Game Shift override: pins CPU & GPU fans to 100% (~5500 RPM)** |
+| Desired Mode | Desktop Slider (`powerprofilesctl`) | CPU Scaling Governor | Intel EPP Register | Dell WMAX ACPI Profile | Embedded Controller (EC) Behavior |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`battery`** | `power-saver` | `powersave` | `power` | `low-power` (`0xa5`) | Aggressive CPU clock capping; fans 0 RPM / passive |
+| **`quiet`** | `power-saver` | `powersave` | `power` | `quiet` (`0xa3`) | Low acoustic limit; fans whisper quiet (~800–1200 RPM) |
+| **`balanced`** | `balanced` | `powersave` | `balance_performance` | `balanced` (`0xa0`) | Normal factory dynamic curves; adaptive fan ramp |
+| **`performance`** | `performance` | `performance` | `performance` | `balanced-performance` (`0xa1`) | **Unlocked PL1/PL2 & 95W GPU TGP; dynamic smart fans (NO 100% scream)** |
+| **`gmode`** | `performance` | `performance` | `performance` | `performance` (`0xab`) | **Game Shift override: pins CPU & GPU fans to 100% (~5500 RPM)** |
 
 ---
 

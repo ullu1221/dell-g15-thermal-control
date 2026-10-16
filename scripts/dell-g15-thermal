@@ -53,6 +53,14 @@ PPD_MAP = {
     "gmode": "performance",
 }
 
+GOVERNOR_MAP = {
+    "battery": "powersave",
+    "quiet": "powersave",
+    "balanced": "powersave",
+    "performance": "performance",
+    "gmode": "performance",
+}
+
 EPP_MAP = {
     "battery": "power",
     "quiet": "power",
@@ -96,6 +104,7 @@ def save_persistent_state(mode: str, cpu_boost: int = None, gpu_boost: int = Non
     cur["mode"] = mode
     cur["wmax"] = WMAX_MAP.get(mode, "balanced")
     cur["ppd"] = PPD_MAP.get(mode, "balanced")
+    cur["governor"] = GOVERNOR_MAP.get(mode, "powersave")
     cur["epp"] = EPP_MAP.get(mode, "balance_performance")
     if cpu_boost is not None:
         cur["cpu_boost"] = max(0, min(100, int(cpu_boost)))
@@ -169,6 +178,14 @@ def query_current_state():
         except Exception:
             pass
 
+    gov_file = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+    gov_val = "unknown"
+    if gov_file.exists():
+        try:
+            gov_val = gov_file.read_text().strip()
+        except Exception:
+            pass
+
     hwmon = get_alienware_hwmon()
     cpu_rpm = "N/A"
     gpu_rpm = "N/A"
@@ -193,6 +210,7 @@ def query_current_state():
     return {
         "ppd": ppd_profile,
         "wmax": wmax_mode,
+        "governor": gov_val,
         "epp": epp_val,
         "cpu_rpm": cpu_rpm,
         "gpu_rpm": gpu_rpm,
@@ -212,6 +230,7 @@ def cmd_status():
     print(f"powerprofilesctl Profile:  {state['ppd'].upper()} (Active in Desktop Slider)")
     print(f"Native AWCC WMAX Profile:  {state['wmax'].upper()} (0x{get_awcc_code(state['wmax']):02x})")
     print(f"Game Shift / G-Mode:       {'ACTIVE [100% FAN OVERRIDE]' if state['gmode'] else 'OFF [Dynamic Fan Curve]'}")
+    print(f"CPU Scaling Governor:      {state['governor']}")
     print(f"CPU Energy Preference:     {state['epp']}")
     print("-" * 65)
     print(f"CPU Fan:                   {state['cpu_rpm']} (Boost Offset: {state['cpu_boost']}%)")
@@ -250,7 +269,7 @@ def cmd_mode(target: str, save: bool = True):
     # CRITICAL: intel_pstate locks EPP to read-only/EBUSY if scaling_governor is 'performance'.
     # When switching to balanced/quiet/battery, scaling_governor MUST be set to 'powersave'
     # before power-profiles-daemon writes to energy_performance_preference.
-    gov_target = "performance" if resolved in ("performance", "gmode") else "powersave"
+    gov_target = GOVERNOR_MAP.get(resolved, "powersave")
     for gov in Path("/sys/devices/system/cpu").glob("cpu*/cpufreq/scaling_governor"):
         try:
             gov.write_text(gov_target)

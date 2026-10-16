@@ -75,6 +75,7 @@ $ dell-g15-thermal status
 powerprofilesctl Profile:  BALANCED (Active in Desktop Slider)
 Native AWCC WMAX Profile:  BALANCED (0xa0)
 Game Shift / G-Mode:       OFF [Dynamic Fan Curve]
+CPU Scaling Governor:      powersave
 CPU Energy Preference:     balance_performance
 -----------------------------------------------------------------
 CPU Fan:                   892 RPM (Boost Offset: 0%)

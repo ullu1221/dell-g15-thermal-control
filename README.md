@@ -114,13 +114,13 @@ flowchart TD
     end
 ```
 
-| Mode | Desktop Slider (`powerprofilesctl`) | CPU EPP Register | Dell WMAX ACPI Profile | Acoustic Behavior |
-| :--- | :--- | :--- | :--- | :--- |
-| **`battery`** | `power-saver` | `power` | `low-power` (`0xa5`) | Passive / throttled |
-| **`quiet`** | `power-saver` | `power` | `quiet` (`0xa3`) | Whisper (~800–1200 RPM) |
-| **`balanced`** | `balanced` | `balance_performance` | `balanced` (`0xa0`) | Normal adaptive curve |
-| **`performance`**| `performance` | `performance` | `balanced-performance` (`0xa1`)| **Unlocked Boost, Dynamic Smart Fans (NO SCREAM)** |
-| **`gmode`** | `performance` | `performance` | `performance` (`0xab`) | **Game Shift 100% Fan Override (~5500 RPM)** |
+| Mode | Desktop Slider (`powerprofilesctl`) | CPU Scaling Governor | CPU EPP Register | Dell WMAX ACPI Profile | Acoustic Behavior |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`battery`** | `power-saver` | `powersave` | `power` | `low-power` (`0xa5`) | Passive / throttled |
+| **`quiet`** | `power-saver` | `powersave` | `power` | `quiet` (`0xa3`) | Whisper (~800–1200 RPM) |
+| **`balanced`** | `balanced` | `powersave` | `balance_performance` | `balanced` (`0xa0`) | Normal adaptive curve |
+| **`performance`**| `performance` | `performance` | `performance` | `balanced-performance` (`0xa1`)| **Unlocked Boost, Dynamic Smart Fans (NO SCREAM)** |
+| **`gmode`** | `performance` | `performance` | `performance` | `performance` (`0xab`) | **Game Shift 100% Fan Override (~5500 RPM)** |
 
 ### 2.4 Disentangling True Performance from Game Shift
 - **True Performance (`0xa1` / `balanced-performance`)**: Lifts CPU PL1/PL2 limits to maximum and boosts RTX 3050 GPU TGP to 95W Dynamic Boost while allowing the fans to scale smoothly between 2000 and 3800 RPM according to temperature.
@@ -164,6 +164,7 @@ $ dell-g15-thermal status
 powerprofilesctl Profile:  BALANCED (Active in Desktop Slider)
 Native AWCC WMAX Profile:  BALANCED (0xa0)
 Game Shift / G-Mode:       OFF [Dynamic Fan Curve]
+CPU Scaling Governor:      powersave
 CPU Energy Preference:     balance_performance
 -----------------------------------------------------------------
 CPU Fan:                   892 RPM (Boost Offset: 0%)
