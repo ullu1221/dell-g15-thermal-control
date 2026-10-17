@@ -79,29 +79,47 @@ pub fn read_telemetry() -> TelemetryData {
         }
     }
     if let Ok(mdeg) = read_sysfs_int(&hwmon.join("temp1_input")) {
-        data.cpu_temp_c = Some((mdeg / 1000) as i32);
+        if (-40_000..=150_000).contains(&mdeg) {
+            if let Ok(deg) = i32::try_from(mdeg / 1000) {
+                data.cpu_temp_c = Some(deg);
+            }
+        }
     }
     if let Ok(mdeg) = read_sysfs_int(&hwmon.join("temp2_input")) {
-        data.gpu_temp_c = Some((mdeg / 1000) as i32);
+        if (-40_000..=150_000).contains(&mdeg) {
+            if let Ok(deg) = i32::try_from(mdeg / 1000) {
+                data.gpu_temp_c = Some(deg);
+            }
+        }
     }
 
     data
 }
 
-/// Sets fan boost offsets defensively. Enforces 0 <= boost <= 100.
+/// Helper to format a bounded u8 into a stack buffer without heap allocation.
+fn format_u8(val: u8, buf: &mut [u8; 4]) -> &str {
+    use std::io::Write;
+    let mut cursor = std::io::Cursor::new(&mut buf[..]);
+    let _ = write!(cursor, "{val}");
+    let len = cursor.position() as usize;
+    std::str::from_utf8(&buf[..len]).unwrap_or("0")
+}
+
+/// Sets fan boost offsets defensively. Enforces 0 <= boost <= 100. Zero allocation.
 pub fn set_fan_boost(cpu_boost: Option<u8>, gpu_boost: Option<u8>) -> Result<(), SysfsError> {
     let hwmon = find_alienware_hwmon().ok_or(SysfsError::NotFound)?;
+    let mut buf = [0u8; 4];
 
     if let Some(b) = cpu_boost {
         let bounded = b.min(100);
         let path = hwmon.join("fan1_boost");
-        write_sysfs(&path, &bounded.to_string())?;
+        write_sysfs(&path, format_u8(bounded, &mut buf))?;
     }
 
     if let Some(b) = gpu_boost {
         let bounded = b.min(100);
         let path = hwmon.join("fan2_boost");
-        write_sysfs(&path, &bounded.to_string())?;
+        write_sysfs(&path, format_u8(bounded, &mut buf))?;
     }
 
     Ok(())

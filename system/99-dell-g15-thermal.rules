@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Grant group 'wheel' write access to platform-profile attributes
-SUBSYSTEM=="platform-profile", ACTION=="add|change", RUN+="/usr/bin/chmod 0664 /sys/class/platform-profile/platform-profile-0/profile", RUN+="/usr/bin/chgrp wheel /sys/class/platform-profile/platform-profile-0/profile"
+SUBSYSTEM=="platform-profile", ACTION=="add|change", RUN+="/usr/bin/chmod 0664 %S%p/profile", RUN+="/usr/bin/chgrp wheel %S%p/profile"
 
 # Grant group 'wheel' write access to Alienware WMAX fan boost attributes
 SUBSYSTEM=="hwmon", ATTR{name}=="alienware_wmi", ACTION=="add|change", RUN+="/usr/bin/chmod 0664 %S%p/fan1_boost %S%p/fan2_boost", RUN+="/usr/bin/chgrp wheel %S%p/fan1_boost %S%p/fan2_boost"

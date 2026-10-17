@@ -83,13 +83,9 @@ pub fn save_state(state: &PersistentState) -> std::io::Result<()> {
 
 /// Defensively loads state from disk. Reverts to Balanced on corruption or missing file.
 pub fn load_state() -> PersistentState {
-    let mut candidates = Vec::new();
-    if let Some(p) = get_user_state_path() {
-        candidates.push(p);
-    }
-    candidates.push(get_system_state_path());
+    let candidates: [Option<PathBuf>; 2] = [get_user_state_path(), Some(get_system_state_path())];
 
-    for path in candidates {
+    for path in candidates.into_iter().flatten() {
         if path.exists() {
             if let Ok(mut f) = File::open(&path) {
                 let mut buf = [0u8; 1024];
@@ -125,11 +121,11 @@ fn parse_simple_state(json: &str) -> Option<PersistentState> {
             }
         } else if trimmed.starts_with("\"cpu_boost\":") {
             if let Some(n) = extract_int_val(trimmed) {
-                cpu_boost = (n as u8).min(100);
+                cpu_boost = n.min(100) as u8;
             }
         } else if trimmed.starts_with("\"gpu_boost\":") {
             if let Some(n) = extract_int_val(trimmed) {
-                gpu_boost = (n as u8).min(100);
+                gpu_boost = n.min(100) as u8;
             }
         }
     }
@@ -142,19 +138,59 @@ fn parse_simple_state(json: &str) -> Option<PersistentState> {
 }
 
 fn extract_string_val(line: &str) -> Option<&str> {
-    let parts: Vec<&str> = line.split(':').collect();
-    if parts.len() >= 2 {
-        let raw = parts[1].trim().trim_matches(|c| c == '"' || c == ',' || c == ' ');
-        return Some(raw);
-    }
-    None
+    let (_, val) = line.split_once(':')?;
+    let raw = val.trim().trim_matches(|c| c == '"' || c == ',' || c == ' ');
+    Some(raw)
 }
 
 fn extract_int_val(line: &str) -> Option<u64> {
-    let parts: Vec<&str> = line.split(':').collect();
-    if parts.len() >= 2 {
-        let raw = parts[1].trim().trim_matches(|c| c == ',' || c == ' ');
-        return raw.parse::<u64>().ok();
+    let (_, val) = line.split_once(':')?;
+    let raw = val.trim().trim_matches(|c| c == ',' || c == ' ');
+    raw.parse::<u64>().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_simple_state_valid() {
+        let json = r#"{
+  "mode": "performance",
+  "wmax": "balanced-performance",
+  "ppd": "performance",
+  "governor": "performance",
+  "epp": "performance",
+  "cpu_boost": 45,
+  "gpu_boost": 50,
+  "timestamp": 123456789
+}"#;
+        let st = parse_simple_state(json).expect("valid parse");
+        assert_eq!(st.mode, ThermalMode::Performance);
+        assert_eq!(st.cpu_boost, 45);
+        assert_eq!(st.gpu_boost, 50);
     }
-    None
+
+    #[test]
+    fn test_parse_simple_state_clamping_prevents_truncation() {
+        let json = r#"{
+  "mode": "quiet",
+  "cpu_boost": 257,
+  "gpu_boost": 9999
+}"#;
+        let st = parse_simple_state(json).expect("valid parse");
+        assert_eq!(st.mode, ThermalMode::Quiet);
+        // 257 must clamp to 100, NOT truncate to 1
+        assert_eq!(st.cpu_boost, 100);
+        assert_eq!(st.gpu_boost, 100);
+    }
+
+    #[test]
+    fn test_parse_corrupt_json_fallback() {
+        let json = "not valid json at all";
+        let st = parse_simple_state(json).expect("valid fallback");
+        assert_eq!(st.mode, ThermalMode::Balanced);
+        assert_eq!(st.cpu_boost, 0);
+        assert_eq!(st.gpu_boost, 0);
+    }
 }

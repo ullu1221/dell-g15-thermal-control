@@ -3,6 +3,7 @@ Description=Dell G15 5530 HPC Native Thermal Sentinel
 Documentation=https://github.com/ullu1221/dell-g15-thermal-control
 After=power-profiles-daemon.service
 Wants=power-profiles-daemon.service
+Conflicts=dell-g15-thermal.service
 
 [Service]
 Type=oneshot
@@ -10,6 +11,15 @@ ExecStart=/usr/local/bin/g15-sentinel restore
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
 
 [Install]
 WantedBy=graphical.target

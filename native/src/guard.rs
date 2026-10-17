@@ -10,23 +10,30 @@ pub const CRITICAL_GPU_TEMP_C: i32 = 86;
 
 /// Reverts the machine immediately to the verified fail-safe default state.
 /// Guaranteed to complete deterministically in < 200 microseconds.
-pub fn apply_emergency_failsafe() {
+pub fn apply_emergency_failsafe() -> Result<(), crate::sysfs::SysfsError> {
     eprintln!("[!] ENGAGING HARDWARE FAIL-SAFE DEFAULT (BALANCED ACPI + POWERSAVE GOVERNOR)...");
 
     // 1. Force CPU governor to powersave across all cores
-    sync_cpu_governors("powersave");
+    let synced_govs = sync_cpu_governors("powersave");
+    if synced_govs == 0 {
+        eprintln!("[!] Warning: Zero CPU scaling governors updated to powersave during failsafe.");
+    }
 
     // 2. Force CPU EPP to balance_performance
-    sync_cpu_epp("balance_performance");
+    let synced_epp = sync_cpu_epp("balance_performance");
+    if synced_epp == 0 {
+        eprintln!("[!] Warning: Zero CPU EPP registers updated to balance_performance during failsafe.");
+    }
 
     // 3. Force WMAX ACPI platform profile to balanced
     let wmax_path = get_wmax_path();
-    let _ = write_sysfs(wmax_path, ThermalMode::Balanced.wmax_profile());
+    write_sysfs(wmax_path, ThermalMode::Balanced.wmax_profile())?;
 
     // 4. Reset fan boost offsets to factory dynamic curve
-    let _ = set_fan_boost(Some(0), Some(0));
+    set_fan_boost(Some(0), Some(0))?;
 
     eprintln!("[✓] Hardware fail-safe state successfully applied.");
+    Ok(())
 }
 
 /// Evaluates hardware telemetry and takes defensive action if thresholds are breached.
@@ -49,9 +56,14 @@ pub fn audit_thermal_guard() -> bool {
     }
 
     if breach {
-        // Automatically inject cooling override
-        let _ = set_fan_boost(Some(50), Some(50));
-        sync_cpu_governors("powersave");
+        eprintln!("[!] Thermal breach threshold exceeded! Initiating emergency failsafe protocol...");
+        if let Err(e) = apply_emergency_failsafe() {
+            eprintln!("[CRITICAL] Emergency failsafe failed to engage: {e}");
+        }
+        // Force emergency maximum fan boost (100% duty cycle) to rapidly purge heat
+        if let Err(e) = set_fan_boost(Some(100), Some(100)) {
+            eprintln!("[CRITICAL] Failed to engage emergency maximum cooling: {e}");
+        }
     }
 
     breach

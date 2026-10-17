@@ -1,13 +1,23 @@
 [Unit]
 Description=Dell G15 5530 Thermal Mode & Power Profile Bridge
 Documentation=https://github.com/ullu1221/dell-g15-thermal-control
-After=power-profiles-daemon.service multi-user.target
+After=power-profiles-daemon.service
 Wants=power-profiles-daemon.service
+Conflicts=dell-g15-sentinel.service
 
 [Service]
 Type=oneshot
 ExecStart=/bin/sh -c 'if [ -x /usr/local/bin/g15-sentinel ]; then exec /usr/local/bin/g15-sentinel restore; elif [ -x /usr/local/bin/dell-g15-thermal ]; then exec /usr/local/bin/dell-g15-thermal init; fi'
 RemainAfterExit=yes
+
+# Security Hardening
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
 
 [Install]
 WantedBy=multi-user.target

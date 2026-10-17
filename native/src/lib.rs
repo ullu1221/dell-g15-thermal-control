@@ -61,8 +61,11 @@ pub fn apply_mode(mode: ThermalMode, save: bool) -> Result<(), sysfs::SysfsError
             cpu_boost: current_state.cpu_boost,
             gpu_boost: current_state.gpu_boost,
         };
-        let _ = state::save_state(&new_state);
-        println!("[✓] Persisted thermal state '{}' across reboots.", mode.name());
+        if let Err(e) = state::save_state(&new_state) {
+            eprintln!("[!] Warning: Failed to persist thermal state to disk: {e}");
+        } else {
+            println!("[✓] Persisted thermal state '{}' across reboots.", mode.name());
+        }
     }
 
     println!("[✓] Dell G15 '{}' mode successfully activated ({} CPUs synced).", mode.name(), updated_govs);
@@ -79,8 +82,11 @@ pub fn restore_saved_state() -> Result<(), sysfs::SysfsError> {
 
     // Restore fan boosts if elevated
     if saved.cpu_boost > 0 || saved.gpu_boost > 0 {
-        let _ = hwmon::set_fan_boost(Some(saved.cpu_boost), Some(saved.gpu_boost));
-        println!("[✓] Restored fan boosts: CPU +{}%, GPU +{}%.", saved.cpu_boost, saved.gpu_boost);
+        if let Err(e) = hwmon::set_fan_boost(Some(saved.cpu_boost), Some(saved.gpu_boost)) {
+            eprintln!("[!] Warning: Failed to restore fan boosts: {e}");
+        } else {
+            println!("[✓] Restored fan boosts: CPU +{}%, GPU +{}%.", saved.cpu_boost, saved.gpu_boost);
+        }
     }
 
     println!("[✓] Dell G15 hardware thermal state successfully restored to '{}'.", saved.mode.name());

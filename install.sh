@@ -21,13 +21,13 @@ install_user() {
 
     if command -v cargo &>/dev/null && [[ -d "$SCRIPT_DIR/native" ]]; then
         echo "[*] Compiling High-Risk HPC Static Native Engine (g15-sentinel)..."
-        TARGET_FLAG=""
+        cargo_flags=()
         BIN_PATH="$SCRIPT_DIR/native/target/release/g15-thermal-sentinel"
         if rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then
-            TARGET_FLAG="--target x86_64-unknown-linux-musl"
+            cargo_flags+=(--target x86_64-unknown-linux-musl)
             BIN_PATH="$SCRIPT_DIR/native/target/x86_64-unknown-linux-musl/release/g15-thermal-sentinel"
         fi
-        (cd "$SCRIPT_DIR/native" && cargo build --release $TARGET_FLAG -q) || true
+        (cd "$SCRIPT_DIR/native" && cargo build --release "${cargo_flags[@]}" -q) || true
         if [[ -f "$BIN_PATH" ]]; then
             cp "$BIN_PATH" "$HOME/.local/bin/g15-sentinel"
             echo "  -> Installed High-Risk HPC Binary: $HOME/.local/bin/g15-sentinel"
@@ -64,13 +64,13 @@ install_system() {
 
     if command -v cargo &>/dev/null && [[ -d "$SCRIPT_DIR/native" ]]; then
         echo "      Compiling & installing /usr/local/bin/g15-sentinel (HPC Native Engine)..."
-        TARGET_FLAG=""
+        cargo_flags=()
         BIN_PATH="$SCRIPT_DIR/native/target/release/g15-thermal-sentinel"
         if rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then
-            TARGET_FLAG="--target x86_64-unknown-linux-musl"
+            cargo_flags+=(--target x86_64-unknown-linux-musl)
             BIN_PATH="$SCRIPT_DIR/native/target/x86_64-unknown-linux-musl/release/g15-thermal-sentinel"
         fi
-        (cd "$SCRIPT_DIR/native" && cargo build --release $TARGET_FLAG -q) || true
+        (cd "$SCRIPT_DIR/native" && cargo build --release "${cargo_flags[@]}" -q) || true
         if [[ -f "$BIN_PATH" ]]; then
             install -m 755 "$BIN_PATH" /usr/local/bin/g15-sentinel
             echo "  -> Installed /usr/local/bin/g15-sentinel"

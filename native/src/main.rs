@@ -122,7 +122,9 @@ fn cmd_fan(args: &[String]) {
         if let Some(g) = gpu_boost {
             st.gpu_boost = g.min(100);
         }
-        let _ = state::save_state(&st);
+        if let Err(e) = state::save_state(&st) {
+            eprintln!("[!] Warning: Failed to persist fan boost offsets: {e}");
+        }
     } else {
         cmd_status();
     }
@@ -181,7 +183,9 @@ z /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference 0664 root w
         println!("[✓] Created /etc/tmpfiles.d/dell-g15-thermal.conf for permanent persistence across reboots.");
     }
 
-    let _ = restore_saved_state();
+    if let Err(e) = restore_saved_state() {
+        eprintln!("[!] Warning: Failed to restore saved thermal state during init: {e}");
+    }
 }
 
 fn cmd_watch() {
@@ -211,12 +215,12 @@ fn main() {
             match ThermalMode::parse_defensive(target) {
                 Some(mode) => {
                     if let Err(e) = apply_mode(mode, true) {
-                        eprintln!("[ERROR] Failed to set mode: {}", e);
+                        eprintln!("[ERROR] Failed to set mode: {e}");
                         exit(1);
                     }
                 }
                 None => {
-                    eprintln!("[ERROR] Unknown mode '{}'.", target);
+                    eprintln!("[ERROR] Unknown mode '{target}'.");
                     eprintln!("Valid options: battery, quiet, balanced, performance, gmode");
                     exit(1);
                 }
@@ -224,7 +228,7 @@ fn main() {
         }
         "balance" => {
             if let Err(e) = apply_mode(ThermalMode::Balanced, true) {
-                eprintln!("[ERROR] Failed to set balanced mode: {}", e);
+                eprintln!("[ERROR] Failed to set balanced mode: {e}");
                 exit(1);
             }
         }
@@ -234,10 +238,16 @@ fn main() {
             let current = sysfs::read_sysfs(wmax_path, &mut buf).unwrap_or("unknown");
             if current == "performance" {
                 println!("[+] Game Shift / G-Mode currently ACTIVE -> Disengaging to Balanced mode...");
-                let _ = apply_mode(ThermalMode::Balanced, true);
+                if let Err(e) = apply_mode(ThermalMode::Balanced, true) {
+                    eprintln!("[ERROR] Failed to disengage Game Shift: {e}");
+                    exit(1);
+                }
             } else {
                 println!("[+] Engaging Game Shift / G-Mode (Full fan speed override)...");
-                let _ = apply_mode(ThermalMode::GMode, true);
+                if let Err(e) = apply_mode(ThermalMode::GMode, true) {
+                    eprintln!("[ERROR] Failed to engage Game Shift: {e}");
+                    exit(1);
+                }
             }
         }
         "fan" | "fans" => {

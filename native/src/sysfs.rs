@@ -106,20 +106,39 @@ pub fn is_wmax_writable() -> bool {
     OpenOptions::new().write(true).open(path).is_ok()
 }
 
+/// Formats CPU governor sysfs path into a stack buffer without heap allocation.
+pub fn cpu_governor_path(core_id: usize, buf: &mut [u8; 128]) -> Option<&Path> {
+    use std::io::Write;
+    let mut cursor = std::io::Cursor::new(&mut buf[..]);
+    write!(cursor, "{CPU_SYSFS_BASE}/cpu{core_id}/cpufreq/scaling_governor").ok()?;
+    let len = cursor.position() as usize;
+    std::str::from_utf8(&buf[..len]).ok().map(Path::new)
+}
+
+/// Formats CPU EPP sysfs path into a stack buffer without heap allocation.
+pub fn cpu_epp_path(core_id: usize, buf: &mut [u8; 128]) -> Option<&Path> {
+    use std::io::Write;
+    let mut cursor = std::io::Cursor::new(&mut buf[..]);
+    write!(cursor, "{CPU_SYSFS_BASE}/cpu{core_id}/cpufreq/energy_performance_preference").ok()?;
+    let len = cursor.position() as usize;
+    std::str::from_utf8(&buf[..len]).ok().map(Path::new)
+}
+
 /// Synchronizes CPU scaling governors across all detected cores (bounded to max 32 cores).
 pub fn sync_cpu_governors(governor: &str) -> usize {
     let mut updated = 0;
+    let mut path_buf = [0u8; 128];
     // Bounded iteration across cpu0..cpu31
     for core_id in 0..32 {
-        let path_str = format!("{}/cpu{}/cpufreq/scaling_governor", CPU_SYSFS_BASE, core_id);
-        let path = Path::new(&path_str);
-        if path.exists() {
-            if write_sysfs(path, governor).is_ok() {
-                updated += 1;
+        if let Some(path) = cpu_governor_path(core_id, &mut path_buf) {
+            if path.exists() {
+                if write_sysfs(path, governor).is_ok() {
+                    updated += 1;
+                }
+            } else if core_id >= 16 {
+                // Reached core ceiling for the Dell G15 5530 (16 threads max)
+                break;
             }
-        } else if core_id >= 16 {
-            // Reached core ceiling for the Dell G15 5530 (16 threads max)
-            break;
         }
     }
     updated
@@ -128,16 +147,36 @@ pub fn sync_cpu_governors(governor: &str) -> usize {
 /// Synchronizes CPU EPP registers across all detected cores (bounded to max 32 cores).
 pub fn sync_cpu_epp(epp: &str) -> usize {
     let mut updated = 0;
+    let mut path_buf = [0u8; 128];
     for core_id in 0..32 {
-        let path_str = format!("{}/cpu{}/cpufreq/energy_performance_preference", CPU_SYSFS_BASE, core_id);
-        let path = Path::new(&path_str);
-        if path.exists() {
-            if write_sysfs(path, epp).is_ok() {
-                updated += 1;
+        if let Some(path) = cpu_epp_path(core_id, &mut path_buf) {
+            if path.exists() {
+                if write_sysfs(path, epp).is_ok() {
+                    updated += 1;
+                }
+            } else if core_id >= 16 {
+                break;
             }
-        } else if core_id >= 16 {
-            break;
         }
     }
     updated
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cpu_path_formatting_deterministic() {
+        let mut buf = [0u8; 128];
+        for i in 0..32 {
+            let gov_path = cpu_governor_path(i, &mut buf).expect("valid gov path");
+            let expected = format!("/sys/devices/system/cpu/cpu{i}/cpufreq/scaling_governor");
+            assert_eq!(gov_path.to_str().unwrap(), expected);
+
+            let epp_path = cpu_epp_path(i, &mut buf).expect("valid epp path");
+            let expected_epp = format!("/sys/devices/system/cpu/cpu{i}/cpufreq/energy_performance_preference");
+            assert_eq!(epp_path.to_str().unwrap(), expected_epp);
+        }
+    }
 }
