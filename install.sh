@@ -75,6 +75,12 @@ install_system() {
             install -m 755 "$BIN_PATH" /usr/local/bin/g15-sentinel
             echo "  -> Installed /usr/local/bin/g15-sentinel"
         fi
+    elif [[ -f "/usr/local/bin/g15-sentinel" ]]; then
+        echo "      Detected existing /usr/local/bin/g15-sentinel (HPC Native Engine active)."
+    elif [[ -n "${SUDO_USER:-}" ]] && [[ -f "$(getent passwd "$SUDO_USER" | cut -d: -f6)/.local/bin/g15-sentinel" ]]; then
+        USER_BIN="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.local/bin/g15-sentinel"
+        install -m 755 "$USER_BIN" /usr/local/bin/g15-sentinel
+        echo "  -> Installed pre-existing $USER_BIN to /usr/local/bin/g15-sentinel"
     fi
 
     # Also link to user's .local/bin if SUDO_USER is set
@@ -118,8 +124,12 @@ install_system() {
     systemctl daemon-reload
     systemctl enable --now dell-g15-thermal.service
 
-    echo "[4/4] Setting power-profiles-daemon default to balanced..."
-    if command -v powerprofilesctl &>/dev/null; then
+    echo "[4/4] Restoring saved thermal state & power profile..."
+    if [[ -x /usr/local/bin/g15-sentinel ]]; then
+        /usr/local/bin/g15-sentinel restore 2>/dev/null || true
+    elif [[ -x /usr/local/bin/dell-g15-thermal ]]; then
+        /usr/local/bin/dell-g15-thermal restore 2>/dev/null || true
+    elif command -v powerprofilesctl &>/dev/null; then
         powerprofilesctl set balanced 2>/dev/null || true
     fi
 

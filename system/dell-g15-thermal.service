@@ -6,7 +6,7 @@ Wants=power-profiles-daemon.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/dell-g15-thermal init
+ExecStart=/bin/sh -c 'if [ -x /usr/local/bin/g15-sentinel ]; then exec /usr/local/bin/g15-sentinel restore; elif [ -x /usr/local/bin/dell-g15-thermal ]; then exec /usr/local/bin/dell-g15-thermal init; fi'
 RemainAfterExit=yes
 
 [Install]
