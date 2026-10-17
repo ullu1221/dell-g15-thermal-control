@@ -62,19 +62,28 @@ install_system() {
     echo "[1/4] Installing /usr/local/bin/dell-g15-thermal..."
     install -m 755 "$SCRIPT_DIR/scripts/dell-g15-thermal" /usr/local/bin/dell-g15-thermal
 
+    # Check if cargo is available in PATH or in SUDO_USER's .cargo/bin
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        if [[ -x "$USER_HOME/.cargo/bin/cargo" ]]; then
+            export PATH="$USER_HOME/.cargo/bin:$PATH"
+        fi
+    fi
+
+    BIN_PATH="$SCRIPT_DIR/native/target/release/g15-thermal-sentinel"
     if command -v cargo &>/dev/null && [[ -d "$SCRIPT_DIR/native" ]]; then
         echo "      Compiling & installing /usr/local/bin/g15-sentinel (HPC Native Engine)..."
         cargo_flags=()
-        BIN_PATH="$SCRIPT_DIR/native/target/release/g15-thermal-sentinel"
         if rustup target list 2>/dev/null | grep -q "x86_64-unknown-linux-musl (installed)"; then
             cargo_flags+=(--target x86_64-unknown-linux-musl)
             BIN_PATH="$SCRIPT_DIR/native/target/x86_64-unknown-linux-musl/release/g15-thermal-sentinel"
         fi
         (cd "$SCRIPT_DIR/native" && cargo build --release "${cargo_flags[@]}" -q) || true
-        if [[ -f "$BIN_PATH" ]]; then
-            install -m 755 "$BIN_PATH" /usr/local/bin/g15-sentinel
-            echo "  -> Installed /usr/local/bin/g15-sentinel"
-        fi
+    fi
+
+    if [[ -f "$BIN_PATH" ]]; then
+        install -m 755 "$BIN_PATH" /usr/local/bin/g15-sentinel
+        echo "  -> Installed /usr/local/bin/g15-sentinel"
     elif [[ -f "/usr/local/bin/g15-sentinel" ]]; then
         echo "      Detected existing /usr/local/bin/g15-sentinel (HPC Native Engine active)."
     elif [[ -n "${SUDO_USER:-}" ]] && [[ -f "$(getent passwd "$SUDO_USER" | cut -d: -f6)/.local/bin/g15-sentinel" ]]; then
@@ -120,6 +129,12 @@ install_system() {
     done
 
     echo "[3/4] Installing boot initialization service..."
+    # Disable redundant sentinel service if enabled to prevent race condition
+    if systemctl is-enabled dell-g15-sentinel.service &>/dev/null; then
+        echo "      Disabling redundant dell-g15-sentinel.service to prevent startup race condition..."
+        systemctl disable dell-g15-sentinel.service 2>/dev/null || true
+    fi
+
     install -m 644 "$SCRIPT_DIR/system/dell-g15-thermal.service" /etc/systemd/system/dell-g15-thermal.service
     systemctl daemon-reload
     systemctl enable --now dell-g15-thermal.service
