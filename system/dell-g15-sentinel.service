@@ -1,0 +1,17 @@
+[Unit]
+Description=Dell G15 5530 HPC Native Thermal Sentinel (DO-178C Level A Determinism)
+Documentation=https://github.com/ullu1221/dell-g15-thermal-control
+After=power-profiles-daemon.service
+Wants=power-profiles-daemon.service
+DefaultDependencies=no
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/g15-sentinel restore
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
