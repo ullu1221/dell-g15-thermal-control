@@ -45,6 +45,11 @@ class TestDellG15ThermalControl(unittest.TestCase):
                 cpu_boost=cls.initial_state.get("cpu_boost", 0),
                 gpu_boost=cls.initial_state.get("gpu_boost", 0),
             )
+        # Authoritatively re-apply active HPC profile to guarantee system alignment
+        for hpc_bin in ["/usr/local/bin/hpc-perf", "/home/p/.local/bin/hpc-perf", "hpc-perf"]:
+            if shutil.which(hpc_bin) or Path(hpc_bin).exists():
+                subprocess.run([hpc_bin, "apply"], capture_output=True)
+                break
 
     def test_01_script_exists_and_executable(self):
         """Verifies that dell-g15-thermal exists and has executable permissions."""
