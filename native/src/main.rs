@@ -186,7 +186,22 @@ fn cmd_init() {
             let _ = fs::set_permissions(&epp, fs::Permissions::from_mode(0o664));
             let _ = Command::new("chgrp").args(["wheel", &epp.to_string_lossy()]).output();
         }
+        let epb = Path::new("/sys/devices/system/cpu")
+            .join(format!("cpu{}", core_id))
+            .join("power/energy_perf_bias");
+        if epb.exists() {
+            let _ = fs::set_permissions(&epb, fs::Permissions::from_mode(0o664));
+            let _ = Command::new("chgrp").args(["wheel", &epb.to_string_lossy()]).output();
+        }
     }
+
+    // Ensure persistent state file in /etc exists and is group-writable by wheel
+    let state_file = Path::new("/etc/dell-g15-state.json");
+    if !state_file.exists() {
+        let _ = fs::write(state_file, "{}\n");
+    }
+    let _ = fs::set_permissions(state_file, fs::Permissions::from_mode(0o664));
+    let _ = Command::new("chgrp").args(["wheel", "/etc/dell-g15-state.json"]).output();
 
     // Write permanent tmpfiles.d configuration
     let tmpfiles_path = Path::new("/etc/tmpfiles.d/dell-g15-thermal.conf");
@@ -197,6 +212,8 @@ z /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan1_boost 
 z /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan2_boost 0664 root wheel -
 z /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 0664 root wheel -
 z /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference 0664 root wheel -
+z /sys/devices/system/cpu/cpu*/power/energy_perf_bias 0664 root wheel -
+f /etc/dell-g15-state.json 0664 root wheel -
 ";
     if fs::write(tmpfiles_path, tmpfiles_content).is_ok() {
         let _ = Command::new("systemd-tmpfiles").args(["--create", "/etc/tmpfiles.d/dell-g15-thermal.conf"]).output();

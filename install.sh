@@ -98,8 +98,9 @@ install_system() {
         if [[ -d "$USER_HOME" ]]; then
             mkdir -p "$USER_HOME/.local/bin"
             ln -sf /usr/local/bin/dell-g15-thermal "$USER_HOME/.local/bin/dell-g15-thermal"
-            chown -h "$SUDO_USER:$SUDO_USER" "$USER_HOME/.local/bin/dell-g15-thermal" 2>/dev/null || true
-            echo "  -> Linked /usr/local/bin/dell-g15-thermal to $USER_HOME/.local/bin/dell-g15-thermal"
+            ln -sf /usr/local/bin/g15-sentinel "$USER_HOME/.local/bin/g15-sentinel"
+            chown -h "$SUDO_USER:$SUDO_USER" "$USER_HOME/.local/bin/dell-g15-thermal" "$USER_HOME/.local/bin/g15-sentinel" 2>/dev/null || true
+            echo "  -> Linked dell-g15-thermal and g15-sentinel to $USER_HOME/.local/bin/"
         fi
     fi
 

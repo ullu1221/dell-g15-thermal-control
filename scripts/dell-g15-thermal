@@ -120,11 +120,15 @@ def save_persistent_state(mode: str, cpu_boost: int = None, gpu_boost: int = Non
     saved_any = False
     for p in STATE_PATHS:
         try:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            tmp_p = p.with_suffix(f".tmp.{os.getpid()}")
-            tmp_p.write_text(json.dumps(cur, indent=2))
-            tmp_p.replace(p)
-            saved_any = True
+            if p.exists() and os.access(p, os.W_OK):
+                p.write_text(json.dumps(cur, indent=2))
+                saved_any = True
+            else:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                tmp_p = p.with_suffix(f".tmp.{os.getpid()}")
+                tmp_p.write_text(json.dumps(cur, indent=2))
+                tmp_p.replace(p)
+                saved_any = True
         except Exception:
             pass
     if saved_any:
@@ -397,7 +401,8 @@ def cmd_fan(cpu_boost: int = None, gpu_boost: int = None, save: bool = True):
             hwmon.joinpath("fan2_boost").write_text(str(gpu_boost))
             print(f"[✓] GPU Fan Boost offset set to {gpu_boost}%.")
         except PermissionError:
-            pass
+            print(f"[!] Setting fan boost requires root or group 'wheel' permissions.")
+            print("    Run: sudo dell-g15-thermal init")
         except Exception as e:
             print(f"[!] Error setting GPU fan boost: {e}")
 
@@ -462,14 +467,27 @@ def cmd_init():
                     except Exception as e:
                         print(f"[!] Could not set permissions on {p}: {e}")
 
-        # Also ensure permissions on cpu scaling_governor and energy_performance_preference
-        for pattern in ("cpu*/cpufreq/scaling_governor", "cpu*/cpufreq/energy_performance_preference"):
+        # Also ensure permissions on cpu scaling_governor, energy_performance_preference, and energy_perf_bias
+        for pattern in ("cpu*/cpufreq/scaling_governor", "cpu*/cpufreq/energy_performance_preference", "cpu*/power/energy_perf_bias"):
             for f in Path("/sys/devices/system/cpu").glob(pattern):
                 try:
                     os.chmod(f, 0o664)
                     shutil.chown(f, group="wheel")
                 except Exception:
                     pass
+
+        # Ensure persistent state file in /etc exists and is group-writable by wheel
+        state_file = Path("/etc/dell-g15-state.json")
+        if not state_file.exists():
+            try:
+                state_file.write_text("{}\n")
+            except Exception:
+                pass
+        try:
+            os.chmod(state_file, 0o664)
+            shutil.chown(state_file, group="wheel")
+        except Exception:
+            pass
 
         # Also write permanent tmpfiles.d configuration so permissions persist across boots
         try:
@@ -481,6 +499,8 @@ def cmd_init():
                 "z /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan2_boost 0664 root wheel -\n"
                 "z /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 0664 root wheel -\n"
                 "z /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference 0664 root wheel -\n"
+                "z /sys/devices/system/cpu/cpu*/power/energy_perf_bias 0664 root wheel -\n"
+                "f /etc/dell-g15-state.json 0664 root wheel -\n"
             )
             tmpfiles_path.write_text(tmpfiles_content)
             subprocess.run(["systemd-tmpfiles", "--create", "/etc/tmpfiles.d/dell-g15-thermal.conf"], check=False)
