@@ -28,6 +28,24 @@ def load_dell_thermal():
 
 class TestDellG15ThermalControl(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        mod = load_dell_thermal()
+        cls.initial_state = mod.load_saved_state()
+        cls.initial_mode = cls.initial_state.get("mode", "performance")
+
+    @classmethod
+    def tearDownClass(cls):
+        mod = load_dell_thermal()
+        if cls.initial_mode:
+            subprocess.run([sys.executable, str(SCRIPT), "mode", cls.initial_mode], capture_output=True)
+        if cls.initial_state:
+            mod.save_persistent_state(
+                cls.initial_state.get("mode", "performance"),
+                cpu_boost=cls.initial_state.get("cpu_boost", 0),
+                gpu_boost=cls.initial_state.get("gpu_boost", 0),
+            )
+
     def test_01_script_exists_and_executable(self):
         """Verifies that dell-g15-thermal exists and has executable permissions."""
         self.assertTrue(SCRIPT.exists(), f"Script not found at {SCRIPT}")
@@ -76,18 +94,20 @@ class TestDellG15ThermalControl(unittest.TestCase):
     def test_05_state_persistence_cycle(self):
         """Verifies atomic state saving and loading across temporary state files."""
         mod = load_dell_thermal()
-
-        # Test save and load
-        try:
-            mod.save_persistent_state("balanced", cpu_boost=25, gpu_boost=30)
-            state = mod.load_saved_state()
-            self.assertEqual(state.get("mode"), "balanced")
-            self.assertEqual(state.get("governor"), "powersave")
-            self.assertEqual(state.get("cpu_boost"), 25)
-            self.assertEqual(state.get("gpu_boost"), 30)
-        finally:
-            # Clean up so subsequent restore tests don't leave fan boost active on live hardware
-            mod.save_persistent_state("balanced", cpu_boost=0, gpu_boost=0)
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_state_file = Path(tmp_dir) / "state.json"
+            orig_state_paths = list(mod.STATE_PATHS)
+            mod.STATE_PATHS = [tmp_state_file]
+            try:
+                mod.save_persistent_state("balanced", cpu_boost=25, gpu_boost=30)
+                state = mod.load_saved_state()
+                self.assertEqual(state.get("mode"), "balanced")
+                self.assertEqual(state.get("governor"), "powersave")
+                self.assertEqual(state.get("cpu_boost"), 25)
+                self.assertEqual(state.get("gpu_boost"), 30)
+            finally:
+                mod.STATE_PATHS = orig_state_paths
 
     def test_06_sysfs_permissions(self):
         """Verifies write accessibility of AWCC WMAX platform profile nodes and CPU sysfs."""
@@ -106,16 +126,20 @@ class TestDellG15ThermalControl(unittest.TestCase):
             self.assertIn(gov, ["powersave", "performance"])
 
     def test_07_live_mode_transition(self):
-        """Verifies live switching to performance, then safely back to balanced."""
-        # 1. Switch to performance
-        res_perf = subprocess.run([sys.executable, str(SCRIPT), "mode", "performance"], capture_output=True, text=True)
-        self.assertEqual(res_perf.returncode, 0, f"Failed to set performance mode: {res_perf.stderr}")
-        self.assertIn("successfully activated", res_perf.stdout)
-
-        # 2. Switch back to balanced
-        res_bal = subprocess.run([sys.executable, str(SCRIPT), "mode", "balanced"], capture_output=True, text=True)
-        self.assertEqual(res_bal.returncode, 0, f"Failed to restore balanced mode: {res_bal.stderr}")
-        self.assertIn("successfully activated", res_bal.stdout)
+        """Verifies live switching to performance, then safely back to initial mode."""
+        mod = load_dell_thermal()
+        initial_state = mod.load_saved_state()
+        initial_mode = initial_state.get("mode", "balanced")
+        try:
+            # 1. Switch to performance
+            res_perf = subprocess.run([sys.executable, str(SCRIPT), "mode", "performance"], capture_output=True, text=True)
+            self.assertEqual(res_perf.returncode, 0, f"Failed to set performance mode: {res_perf.stderr}")
+            self.assertIn("successfully activated", res_perf.stdout)
+        finally:
+            # 2. Restore whatever mode was active before test started
+            res_restore = subprocess.run([sys.executable, str(SCRIPT), "mode", initial_mode], capture_output=True, text=True)
+            self.assertEqual(res_restore.returncode, 0, f"Failed to restore initial mode: {res_restore.stderr}")
+            self.assertIn("successfully activated", res_restore.stdout)
 
     def test_08_restore_command(self):
         """Verifies the state restore command executes cleanly."""
