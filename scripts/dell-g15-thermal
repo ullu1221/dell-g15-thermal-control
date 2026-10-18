@@ -79,6 +79,7 @@ WMAX_MAP = {
 
 STATE_PATHS = [
     Path.home() / ".config" / "dell-g15" / "state.json",
+    Path("/etc/dell-g15-state.json"),
     Path("/var/tmp/dell-g15-state.json"),
 ]
 

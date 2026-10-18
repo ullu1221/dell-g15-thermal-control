@@ -23,7 +23,7 @@ pub fn find_alienware_hwmon() -> Option<PathBuf> {
         if let Ok(entries) = fs::read_dir(primary) {
             for entry in entries.flatten() {
                 let p = entry.path();
-                if p.file_name().and_then(|n| n.to_str()).map_or(false, |s| s.starts_with("hwmon")) {
+                if p.file_name().and_then(|n| n.to_str()).is_some_and(|s| s.starts_with("hwmon")) {
                     return Some(p);
                 }
             }
@@ -59,12 +59,12 @@ pub fn read_telemetry() -> TelemetryData {
     };
 
     if let Ok(rpm) = read_sysfs_int(&hwmon.join("fan1_input")) {
-        if rpm >= 0 && rpm <= 10000 {
+        if (0..=10000).contains(&rpm) {
             data.cpu_rpm = Some(rpm as u32);
         }
     }
     if let Ok(rpm) = read_sysfs_int(&hwmon.join("fan2_input")) {
-        if rpm >= 0 && rpm <= 10000 {
+        if (0..=10000).contains(&rpm) {
             data.gpu_rpm = Some(rpm as u32);
         }
     }

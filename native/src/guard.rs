@@ -57,12 +57,14 @@ pub fn audit_thermal_guard() -> bool {
 
     if breach {
         eprintln!("[!] Thermal breach threshold exceeded! Initiating emergency failsafe protocol...");
-        if let Err(e) = apply_emergency_failsafe() {
-            eprintln!("[CRITICAL] Emergency failsafe failed to engage: {e}");
-        }
+        let _ = sync_cpu_governors("powersave");
+        let _ = sync_cpu_epp("power");
+        let _ = write_sysfs(get_wmax_path(), ThermalMode::Balanced.wmax_profile());
         // Force emergency maximum fan boost (100% duty cycle) to rapidly purge heat
         if let Err(e) = set_fan_boost(Some(100), Some(100)) {
             eprintln!("[CRITICAL] Failed to engage emergency maximum cooling: {e}");
+        } else {
+            eprintln!("[✓] Emergency cooling engaged: CPU/GPU fans at 100% duty cycle.");
         }
     }
 

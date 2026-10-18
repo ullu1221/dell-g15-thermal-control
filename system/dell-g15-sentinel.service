@@ -7,15 +7,15 @@ Conflicts=dell-g15-thermal.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/g15-sentinel restore
+ExecStart=/usr/local/bin/g15-sentinel init
 RemainAfterExit=yes
 StandardOutput=journal
 StandardError=journal
 
 # Security Hardening
 NoNewPrivileges=yes
-ProtectHome=yes
-PrivateTmp=yes
+ProtectHome=read-only
+PrivateTmp=no
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes

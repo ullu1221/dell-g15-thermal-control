@@ -209,8 +209,8 @@ fn get_fallback_mode_on_gmode_disengage() -> ThermalMode {
     if let Ok(content) = std::fs::read_to_string("/etc/hpc-perf.conf") {
         for line in content.lines() {
             let line = line.trim();
-            if line.starts_with("ACTIVE_PROFILE=") {
-                let val = line["ACTIVE_PROFILE=".len()..].trim().trim_matches('"').to_lowercase();
+            if let Some(val) = line.strip_prefix("ACTIVE_PROFILE=") {
+                let val = val.trim().trim_matches('"').to_lowercase();
                 if val == "ai" || val == "gaming" || val == "vmgaming" || val == "vm-gaming" {
                     return ThermalMode::Performance;
                 } else if val == "battery" {
@@ -259,9 +259,27 @@ fn main() {
                 }
             }
         }
-        "balance" => {
+        "performance" | "perf" => {
+            if let Err(e) = apply_mode(ThermalMode::Performance, true) {
+                eprintln!("[ERROR] Failed to set performance mode: {e}");
+                exit(1);
+            }
+        }
+        "balance" | "balanced" => {
             if let Err(e) = apply_mode(ThermalMode::Balanced, true) {
                 eprintln!("[ERROR] Failed to set balanced mode: {e}");
+                exit(1);
+            }
+        }
+        "quiet" => {
+            if let Err(e) = apply_mode(ThermalMode::Quiet, true) {
+                eprintln!("[ERROR] Failed to set quiet mode: {e}");
+                exit(1);
+            }
+        }
+        "battery" => {
+            if let Err(e) = apply_mode(ThermalMode::Battery, true) {
+                eprintln!("[ERROR] Failed to set battery mode: {e}");
                 exit(1);
             }
         }

@@ -20,21 +20,27 @@ impl ThermalMode {
             || trimmed.eq_ignore_ascii_case("low-power")
         {
             Some(Self::Battery)
-        } else if trimmed.eq_ignore_ascii_case("quiet") || trimmed.eq_ignore_ascii_case("silent") {
+        } else if trimmed.eq_ignore_ascii_case("quiet")
+            || trimmed.eq_ignore_ascii_case("silent")
+            || trimmed.eq_ignore_ascii_case("cool")
+        {
             Some(Self::Quiet)
         } else if trimmed.eq_ignore_ascii_case("balanced")
             || trimmed.eq_ignore_ascii_case("balance")
             || trimmed.eq_ignore_ascii_case("default")
+            || trimmed.eq_ignore_ascii_case("normal")
         {
             Some(Self::Balanced)
         } else if trimmed.eq_ignore_ascii_case("performance")
             || trimmed.eq_ignore_ascii_case("perf")
             || trimmed.eq_ignore_ascii_case("boost")
+            || trimmed.eq_ignore_ascii_case("balanced-performance")
         {
             Some(Self::Performance)
         } else if trimmed.eq_ignore_ascii_case("gmode")
             || trimmed.eq_ignore_ascii_case("g-mode")
             || trimmed.eq_ignore_ascii_case("gameshift")
+            || trimmed.eq_ignore_ascii_case("game-shift")
         {
             Some(Self::GMode)
         } else {

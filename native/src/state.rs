@@ -77,13 +77,18 @@ pub fn save_state(state: &PersistentState) -> std::io::Result<()> {
     if target_path != sys_path {
         let _ = fs::copy(&target_path, &sys_path);
     }
+    let _ = fs::copy(&target_path, "/etc/dell-g15-state.json");
 
     Ok(())
 }
 
 /// Defensively loads state from disk. Reverts to Balanced on corruption or missing file.
 pub fn load_state() -> PersistentState {
-    let candidates: [Option<PathBuf>; 2] = [get_user_state_path(), Some(get_system_state_path())];
+    let candidates: [Option<PathBuf>; 3] = [
+        get_user_state_path(),
+        Some(PathBuf::from("/etc/dell-g15-state.json")),
+        Some(get_system_state_path()),
+    ];
 
     for path in candidates.into_iter().flatten() {
         if path.exists() {
