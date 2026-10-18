@@ -14,7 +14,7 @@ echo " Running Dell G15 Thermal Control Suite Verification"
 echo "=========================================================="
 
 # 1. Syntax Verification
-echo "[1/2] Verifying Python & Bash syntax..."
+echo "[1/3] Verifying Python & Bash syntax..."
 python3 -m py_compile \
     "$REPO_DIR"/scripts/dell-g15-thermal \
     "$SCRIPT_DIR"/test_thermal.py
@@ -22,8 +22,13 @@ python3 -m py_compile \
 bash -n "$REPO_DIR"/install.sh
 echo "  -> Syntax: 100% Valid."
 
-# 2. Automated Test Suite
-echo "[2/2] Launching Thermal & ACPI Test Suite..."
+# 2. Native Rust Engine Verification
+echo "[2/3] Verifying Native Rust Crate (g15-sentinel)..."
+cargo test --manifest-path "$REPO_DIR/native/Cargo.toml"
+echo "  -> Rust Unit Tests: 100% Passed."
+
+# 3. Automated Test Suite
+echo "[3/3] Launching Thermal & ACPI Test Suite..."
 python3 "$SCRIPT_DIR"/test_thermal.py
 
 echo ""

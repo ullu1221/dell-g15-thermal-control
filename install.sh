@@ -109,12 +109,14 @@ install_system() {
     udevadm trigger --subsystem-match=platform-profile --subsystem-match=hwmon 2>/dev/null || true
 
     # Grant immediate permissions to group wheel for existing files
-    if [[ -f "/sys/class/platform-profile/platform-profile-0/profile" ]]; then
-        chmod 664 /sys/class/platform-profile/platform-profile-0/profile || true
-        chgrp wheel /sys/class/platform-profile/platform-profile-0/profile || true
-    fi
+    for prof in /sys/class/platform-profile/platform-profile-*/profile; do
+        if [[ -f "$prof" ]]; then
+            chmod 664 "$prof" || true
+            chgrp wheel "$prof" || true
+        fi
+    done
 
-    for f in /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan*_boost; do
+    for f in /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan*_boost; do
         if [[ -f "$f" ]]; then
             chmod 664 "$f" || true
             chgrp wheel "$f" || true

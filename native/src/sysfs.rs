@@ -87,14 +87,34 @@ pub fn write_sysfs(path: &Path, content: &str) -> Result<(), SysfsError> {
     Ok(())
 }
 
+static RESOLVED_WMAX_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
 /// Returns the primary active WMAX profile path (or fallback).
 pub fn get_wmax_path() -> &'static Path {
-    let wmax = Path::new(WMAX_PROFILE_PATH);
-    if wmax.exists() {
-        wmax
-    } else {
-        Path::new(ACPI_PROFILE_PATH)
-    }
+    RESOLVED_WMAX_PATH.get_or_init(|| {
+        let base = Path::new("/sys/class/platform-profile");
+        if let Ok(entries) = std::fs::read_dir(base) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                let name_file = p.join("name");
+                let mut buf = [0u8; 64];
+                if let Ok(name) = read_sysfs(&name_file, &mut buf) {
+                    if name.trim() == "alienware-wmi" {
+                        let prof = p.join("profile");
+                        if prof.exists() {
+                            return prof;
+                        }
+                    }
+                }
+            }
+        }
+        let wmax = Path::new(WMAX_PROFILE_PATH);
+        if wmax.exists() {
+            wmax.to_path_buf()
+        } else {
+            Path::new(ACPI_PROFILE_PATH).to_path_buf()
+        }
+    })
 }
 
 /// Checks write accessibility of the WMAX profile node.

@@ -131,11 +131,36 @@ def save_persistent_state(mode: str, cpu_boost: int = None, gpu_boost: int = Non
         print(f"[✓] Persisted thermal state '{mode}' across reboots.")
 
 
+def get_wmax_profile_path() -> Path:
+    """Finds the active WMAX platform profile node, preferring alienware-wmi."""
+    base = Path("/sys/class/platform-profile")
+    if base.exists():
+        for p in base.glob("platform-profile-*"):
+            try:
+                name_file = p / "name"
+                if name_file.exists() and name_file.read_text().strip() == "alienware-wmi":
+                    prof = p / "profile"
+                    if prof.exists():
+                        return prof
+            except Exception:
+                pass
+    p0 = Path("/sys/class/platform-profile/platform-profile-0/profile")
+    if p0.exists():
+        return p0
+    return Path("/sys/firmware/acpi/platform_profile")
+
+
 def get_alienware_hwmon() -> Path | None:
     """Finds the hwmon directory associated with alienware_wmi."""
-    hwmon_link = Path("/sys/class/platform-profile/platform-profile-0/device/hwmon")
+    wmax_prof = get_wmax_profile_path()
+    hwmon_link = wmax_prof.parent / "device" / "hwmon"
     if hwmon_link.exists():
         for h in hwmon_link.glob("hwmon*"):
+            return h
+
+    hwmon_link0 = Path("/sys/class/platform-profile/platform-profile-0/device/hwmon")
+    if hwmon_link0.exists():
+        for h in hwmon_link0.glob("hwmon*"):
             return h
 
     for h in Path("/sys/class/hwmon").glob("hwmon*"):
@@ -146,10 +171,6 @@ def get_alienware_hwmon() -> Path | None:
         except Exception:
             pass
     return None
-
-
-def get_wmax_profile_path() -> Path:
-    return Path("/sys/class/platform-profile/platform-profile-0/profile")
 
 
 def query_current_state():
@@ -455,14 +476,15 @@ def cmd_init():
             tmpfiles_path = Path("/etc/tmpfiles.d/dell-g15-thermal.conf")
             tmpfiles_content = (
                 "# Dell G15 5530 Hardware Thermal & Fan Controls\n"
-                "z /sys/class/platform-profile/platform-profile-0/profile 0664 root wheel -\n"
-                "z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan1_boost 0664 root wheel -\n"
-                "z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan2_boost 0664 root wheel -\n"
+                "z /sys/class/platform-profile/platform-profile-*/profile 0664 root wheel -\n"
+                "z /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan1_boost 0664 root wheel -\n"
+                "z /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan2_boost 0664 root wheel -\n"
                 "z /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 0664 root wheel -\n"
                 "z /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference 0664 root wheel -\n"
             )
             tmpfiles_path.write_text(tmpfiles_content)
-            print("[✓] Created /etc/tmpfiles.d/dell-g15-thermal.conf for permanent persistence across reboots.")
+            subprocess.run(["systemd-tmpfiles", "--create", "/etc/tmpfiles.d/dell-g15-thermal.conf"], check=False)
+            print("[✓] Created and applied /etc/tmpfiles.d/dell-g15-thermal.conf for permanent persistence across reboots.")
         except Exception as e:
             print(f"[!] Could not write /etc/tmpfiles.d/dell-g15-thermal.conf: {e}")
 

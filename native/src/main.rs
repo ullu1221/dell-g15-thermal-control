@@ -149,6 +149,16 @@ fn cmd_init() {
         println!("[✓] Granted group 'wheel' write access to {}.", wmax_path.display());
     }
 
+    if let Ok(entries) = fs::read_dir("/sys/class/platform-profile") {
+        for entry in entries.flatten() {
+            let prof = entry.path().join("profile");
+            if prof.exists() {
+                let _ = fs::set_permissions(&prof, fs::Permissions::from_mode(0o664));
+                let _ = Command::new("chgrp").args(["wheel", &prof.to_string_lossy()]).output();
+            }
+        }
+    }
+
     if let Some(hwmon) = hwmon::find_alienware_hwmon() {
         for fan in ["fan1_boost", "fan2_boost"] {
             let p = hwmon.join(fan);
@@ -182,14 +192,15 @@ fn cmd_init() {
     let tmpfiles_path = Path::new("/etc/tmpfiles.d/dell-g15-thermal.conf");
     let tmpfiles_content = "\
 # Dell G15 5530 Hardware Thermal & Fan Controls (HPC Sentinel)
-z /sys/class/platform-profile/platform-profile-0/profile 0664 root wheel -
-z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan1_boost 0664 root wheel -
-z /sys/class/platform-profile/platform-profile-0/device/hwmon/hwmon*/fan2_boost 0664 root wheel -
+z /sys/class/platform-profile/platform-profile-*/profile 0664 root wheel -
+z /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan1_boost 0664 root wheel -
+z /sys/class/platform-profile/platform-profile-*/device/hwmon/hwmon*/fan2_boost 0664 root wheel -
 z /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 0664 root wheel -
 z /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference 0664 root wheel -
 ";
     if fs::write(tmpfiles_path, tmpfiles_content).is_ok() {
-        println!("[✓] Created /etc/tmpfiles.d/dell-g15-thermal.conf for permanent persistence across reboots.");
+        let _ = Command::new("systemd-tmpfiles").args(["--create", "/etc/tmpfiles.d/dell-g15-thermal.conf"]).output();
+        println!("[✓] Created and applied /etc/tmpfiles.d/dell-g15-thermal.conf for permanent persistence across reboots.");
     }
 
     if let Err(e) = restore_saved_state() {

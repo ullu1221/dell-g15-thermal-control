@@ -17,10 +17,26 @@ pub struct TelemetryData {
 
 /// Locates the active Alienware WMI hwmon path under platform-profile or class/hwmon.
 pub fn find_alienware_hwmon() -> Option<PathBuf> {
-    // 1. Primary path under platform-profile device symlink
-    let primary = Path::new("/sys/class/platform-profile/platform-profile-0/device/hwmon");
-    if primary.exists() {
-        if let Ok(entries) = fs::read_dir(primary) {
+    // 1. Primary path under resolved platform-profile device symlink
+    let wmax_path = crate::sysfs::get_wmax_path();
+    if let Some(parent) = wmax_path.parent() {
+        let primary = parent.join("device/hwmon");
+        if primary.exists() {
+            if let Ok(entries) = fs::read_dir(&primary) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.file_name().and_then(|n| n.to_str()).is_some_and(|s| s.starts_with("hwmon")) {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Fallback to platform-profile-0 device/hwmon
+    let p0 = Path::new("/sys/class/platform-profile/platform-profile-0/device/hwmon");
+    if p0.exists() {
+        if let Ok(entries) = fs::read_dir(p0) {
             for entry in entries.flatten() {
                 let p = entry.path();
                 if p.file_name().and_then(|n| n.to_str()).is_some_and(|s| s.starts_with("hwmon")) {

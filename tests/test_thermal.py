@@ -117,7 +117,8 @@ class TestDellG15ThermalControl(unittest.TestCase):
 
     def test_06_sysfs_permissions(self):
         """Verifies write accessibility of AWCC WMAX platform profile nodes and CPU sysfs."""
-        wmax_profile = Path("/sys/class/platform-profile/platform-profile-0/profile")
+        mod = load_dell_thermal()
+        wmax_profile = mod.get_wmax_profile_path()
         if wmax_profile.exists():
             # Check file is readable
             self.assertTrue(os.access(wmax_profile, os.R_OK))
