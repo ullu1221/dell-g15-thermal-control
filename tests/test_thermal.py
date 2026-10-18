@@ -7,6 +7,7 @@ sysfs permissions, telemetry accuracy, and live hardware state transitions.
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest

@@ -196,6 +196,30 @@ fn cmd_watch() {
     }
 }
 
+fn get_fallback_mode_on_gmode_disengage() -> ThermalMode {
+    if let Ok(content) = std::fs::read_to_string("/etc/hpc-perf.conf") {
+        for line in content.lines() {
+            let line = line.trim();
+            if line.starts_with("ACTIVE_PROFILE=") {
+                let val = line["ACTIVE_PROFILE=".len()..].trim().trim_matches('"').to_lowercase();
+                if val == "ai" || val == "gaming" || val == "vmgaming" || val == "vm-gaming" {
+                    return ThermalMode::Performance;
+                } else if val == "battery" {
+                    return ThermalMode::Quiet;
+                } else if val == "daily" {
+                    return ThermalMode::Balanced;
+                }
+            }
+        }
+    }
+    let saved = state::load_state();
+    if saved.mode == ThermalMode::Performance || saved.mode == ThermalMode::GMode {
+        ThermalMode::Performance
+    } else {
+        saved.mode
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -237,8 +261,9 @@ fn main() {
             let wmax_path = sysfs::get_wmax_path();
             let current = sysfs::read_sysfs(wmax_path, &mut buf).unwrap_or("unknown");
             if current == "performance" {
-                println!("[+] Game Shift / G-Mode currently ACTIVE -> Disengaging to Balanced mode...");
-                if let Err(e) = apply_mode(ThermalMode::Balanced, true) {
+                let target = get_fallback_mode_on_gmode_disengage();
+                println!("[+] Game Shift / G-Mode currently ACTIVE -> Disengaging to {} mode...", target.name());
+                if let Err(e) = apply_mode(target, true) {
                     eprintln!("[ERROR] Failed to disengage Game Shift: {e}");
                     exit(1);
                 }

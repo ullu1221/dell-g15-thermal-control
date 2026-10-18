@@ -319,11 +319,31 @@ def cmd_mode(target: str, save: bool = True):
         save_persistent_state(resolved)
 
 
+def get_fallback_mode_on_gmode_disengage() -> str:
+    conf_path = Path("/etc/hpc-perf.conf")
+    if conf_path.exists():
+        try:
+            for line in conf_path.read_text().splitlines():
+                if line.startswith("ACTIVE_PROFILE="):
+                    prof = line.split("=", 1)[1].strip().strip('"').lower()
+                    if prof in ("ai", "gaming", "vmgaming", "vm-gaming"):
+                        return "performance"
+                    elif prof == "battery":
+                        return "quiet"
+                    elif prof == "daily":
+                        return "balanced"
+        except Exception:
+            pass
+    saved = load_saved_state().get("mode", "balanced")
+    return "performance" if saved in ("performance", "gmode") else saved
+
+
 def cmd_gmode():
     state = query_current_state()
     if state["gmode"]:
-        print("[+] Game Shift / G-Mode is currently ACTIVE -> Disengaging to Balanced mode...")
-        cmd_mode("balanced")
+        target = get_fallback_mode_on_gmode_disengage()
+        print(f"[+] Game Shift / G-Mode is currently ACTIVE -> Disengaging to '{target}' mode...")
+        cmd_mode(target)
     else:
         print("[+] Engaging Game Shift / G-Mode (Full fan speed override)...")
         cmd_mode("gmode")
